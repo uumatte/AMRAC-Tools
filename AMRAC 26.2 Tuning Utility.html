@@ -1,0 +1,2446 @@
+<title>AMRAC 26.2 Tuning Utility</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens carried over from the project's own flight-model-analysis.html
+ * so the bench sits in the same visual world as the existing writeup.
+ * ------------------------------------------------------------------ */
+:root {
+  --paper:      #E8EBEE;
+  --surface:    #F7F8FA;
+  --surface-2:  #DFE4E8;
+  --ink:        #13171B;
+  --ink-soft:   #384249;
+  --muted:      #5C6871;
+  --rule:       #C6CDD3;
+  --rule-soft:  #D8DDE2;
+  --accent:     #1E5F86;
+  --accent-dim: #4A809F;
+  --umber:      #8A5A2B;
+  --ok:         #3B7550;
+  --warn:       #9A6E0D;
+  --gap:        #9C3B2B;
+  --shadow:     0 1px 0 rgba(19,23,27,.05);
+  --grid:       #D8DDE2;
+
+  /* Series identity. The eight-slot categorical order validated for both
+     modes; light steps here, dark steps below. Never cycled, never extended
+     with a ninth invented hue. */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0F1216;
+    --surface:    #171C21;
+    --surface-2:  #1F252B;
+    --ink:        #E2E7EB;
+    --ink-soft:   #BEC7CE;
+    --muted:      #8B979F;
+    --rule:       #2A3138;
+    --rule-soft:  #212830;
+    --accent:     #6FB2DA;
+    --accent-dim: #4E7E99;
+    --umber:      #C79A62;
+    --ok:         #6BAE82;
+    --warn:       #D3A83E;
+    --gap:        #D3705C;
+    --shadow:     0 1px 0 rgba(0,0,0,.3);
+    --grid:       #242B33;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:      #0F1216;
+  --surface:    #171C21;
+  --surface-2:  #1F252B;
+  --ink:        #E2E7EB;
+  --ink-soft:   #BEC7CE;
+  --muted:      #8B979F;
+  --rule:       #2A3138;
+  --rule-soft:  #212830;
+  --accent:     #6FB2DA;
+  --accent-dim: #4E7E99;
+  --umber:      #C79A62;
+  --ok:         #6BAE82;
+  --warn:       #D3A83E;
+  --gap:        #D3705C;
+  --shadow:     0 1px 0 rgba(0,0,0,.3);
+  --grid:       #242B33;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 15.5px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0 clamp(14px, 3vw, 40px) 90px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1240px; margin: 0 auto; }
+
+.label, .eyebrow, th, .chip, .seg button, .cell dt, .group td, h2, h3 {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+}
+.mono, td.v, .cell dd, .tick, .val { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+/* ---- masthead ------------------------------------------------------ */
+.masthead { padding: 40px 0 20px; border-bottom: 1px solid var(--ink); }
+.eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent); margin: 0 0 8px;
+}
+h1 {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 700; font-size: clamp(34px, 5.4vw, 52px);
+  line-height: 1.02; margin: 0 0 10px; letter-spacing: .005em;
+  text-wrap: balance;
+}
+.standfirst {
+  margin: 0; max-width: 64ch; color: var(--ink-soft); font-size: 16.5px;
+}
+.byline {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); margin: 14px 0 0;
+  display: flex; flex-wrap: wrap; gap: 4px 20px;
+}
+
+/* ---- control rail -------------------------------------------------- */
+.rail {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+}
+.seg { display: inline-flex; border: 1px solid var(--rule); background: var(--surface); }
+.seg button {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--muted); font-size: 12.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 7px 13px; line-height: 1.2;
+}
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+:root[data-theme="dark"] .seg button[aria-pressed="true"],
+:root:not([data-theme="light"]) .seg button[aria-pressed="true"] { color: #0F1216; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.field { display: flex; align-items: center; gap: 8px; }
+.field > span {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 12px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+}
+.field input[type="range"] { width: 130px; accent-color: var(--accent); }
+.field .val {
+  font-size: 12.5px; color: var(--ink); min-width: 74px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- axis rail ----------------------------------------------------- */
+.axisrail {
+  background: var(--surface); border-bottom: 1px solid var(--rule);
+  padding: 11px 13px 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+}
+.axisrail input[type="number"] {
+  width: 88px; background: var(--paper); color: var(--ink);
+  border: 1px solid var(--rule); padding: 4px 6px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12.5px; font-variant-numeric: tabular-nums;
+}
+.axisrail input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.axisrail input[type="number"]:invalid { border-color: var(--gap); color: var(--gap); }
+.axisrail .unit {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); min-width: 34px;
+}
+.axisrail .hint {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px; color: var(--muted); margin: 0; flex-basis: 100%; max-width: 92ch;
+}
+
+/* ---- selection chips ----------------------------------------------- */
+.picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 16px 0 4px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--rule); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; padding: 5px 11px 5px 8px;
+}
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chip .sw {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--rule); flex: none;
+}
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--ink-soft); background: var(--surface-2); }
+.chip[data-full="1"]:not([aria-pressed="true"]) { opacity: .45; }
+.picker-note {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); margin: 6px 0 0;
+}
+
+/* ---- panels -------------------------------------------------------- */
+.grid { display: grid; gap: 18px; margin-top: 22px; }
+@media (min-width: 900px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+
+.panel { border: 1px solid var(--rule); background: var(--surface); }
+.panel > header { padding: 13px 15px 0; }
+.panel h3 {
+  margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink);
+}
+.panel .sub {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px; color: var(--muted); margin: 3px 0 0;
+}
+.plot { padding: 6px 10px 12px; position: relative; }
+.plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.tick { font-size: 9.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.axis-title {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 10.5px; fill: var(--muted);
+  letter-spacing: .11em; text-transform: uppercase;
+}
+.endlabel {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .06em;
+}
+
+/* ---- legend -------------------------------------------------------- */
+.legend { display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 0 15px 13px; }
+.legend span {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 12px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+.legend i { width: 14px; height: 3px; flex: none; border-radius: 1px; }
+
+/* ---- tooltip ------------------------------------------------------- */
+.tip {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: var(--surface); border: 1px solid var(--ink-soft);
+  padding: 7px 9px; min-width: 120px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px; line-height: 1.5; color: var(--ink);
+  box-shadow: 0 3px 10px rgba(0,0,0,.14);
+}
+.tip[hidden] { display: none; }
+.tip b { font-weight: 700; display: block; margin-bottom: 3px; color: var(--muted); }
+.tip u { text-decoration: none; display: flex; justify-content: space-between; gap: 12px; }
+.tip u i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+
+/* ---- KPI strip ----------------------------------------------------- */
+.envelope {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+  margin: 22px 0 0;
+}
+.cell { background: var(--surface); padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 2px; }
+.cell dt {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--muted);
+}
+.cell dd {
+  margin: 0; font-size: 18px; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1.2;
+}
+.cell dd span { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+/* ---- tables -------------------------------------------------------- */
+.scroller { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); margin-top: 22px; }
+table { border-collapse: collapse; width: 100%; min-width: 700px; font-size: 13.5px; }
+th, td { padding: 6px 11px; text-align: right; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--ink-soft);
+  position: sticky; top: 0; background: var(--surface); cursor: pointer;
+}
+thead th:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+td.v { font-variant-numeric: tabular-nums; }
+td.v.diff { color: var(--umber); font-weight: 500; }
+.group td {
+  background: var(--surface-2); font-size: 12px; font-weight: 600;
+  letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 6px 11px;
+}
+tbody tr:hover td { background: var(--surface-2); }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: baseline; }
+
+/* ---- bars ---------------------------------------------------------- */
+.bars { display: grid; gap: 14px; margin-top: 22px; }
+.barset { border: 1px solid var(--rule); background: var(--surface); padding: 12px 15px 14px; }
+.barset h4 {
+  margin: 0 0 9px; font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink); display: flex; justify-content: space-between; gap: 10px;
+}
+.barset h4 em {
+  font-style: normal; font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px; color: var(--muted); font-weight: 400; letter-spacing: 0;
+}
+.bar { display: grid; grid-template-columns: 78px 1fr 82px; align-items: center; gap: 10px; margin-bottom: 3px; }
+.bar .n {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis;
+}
+.bar .t { height: 11px; background: var(--surface-2); position: relative; }
+.bar .t i { position: absolute; inset: 0 auto 0 0; border-radius: 0 2px 2px 0; }
+.bar .q {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+  text-align: right; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+
+/* ---- status pills / notes ------------------------------------------ */
+.pill {
+  display: inline-block; font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px; padding: 1px 6px; border: 1px solid currentColor;
+}
+.p-ok { color: var(--ok); } .p-warn { color: var(--warn); } .p-gap { color: var(--gap); }
+
+.note {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); margin: 10px 0 0; max-width: 80ch;
+}
+.section-head {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 13px;
+  border-top: 1px solid var(--ink); padding-top: 11px; margin: 44px 0 4px;
+}
+.section-head h2 {
+  margin: 0; font-size: 21px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+}
+.section-head p { margin: 0; grid-column: 2; color: var(--muted); font-size: 14px; }
+
+/* ---- drop zone ----------------------------------------------------- */
+.drop {
+  border: 1px dashed var(--rule); background: var(--surface);
+  padding: 14px 16px; margin-top: 22px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+}
+.drop.over { border-color: var(--accent); background: var(--surface-2); }
+.drop p { margin: 0; font-size: 14px; color: var(--ink-soft); flex: 1 1 260px; }
+.btn {
+  appearance: none; cursor: pointer; border: 1px solid var(--ink-soft);
+  background: transparent; color: var(--ink);
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  padding: 6px 13px;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">AMRAC &middot; Minecraft 26.2</p>
+    <h1>AMRAC 26.2 Tuning Utility</h1>
+    <p class="standfirst">
+      Every aircraft and missile AMRAC ships, with their performance curves
+      computed here from the same aerodynamics, engine and atmosphere the game
+      runs &mdash; not read off a spec sheet. Drop an edited <code>.json</code>
+      in below to compare it with the defaults before it goes into your
+      <code>config/amrac/flightmodel</code> folder.
+    </p>
+    <p class="byline" id="byline"></p>
+  </header>
+
+  <div class="rail">
+    <div class="seg" role="group" aria-label="Domain">
+      <button type="button" data-domain="aircraft" aria-pressed="true">Aircraft</button>
+      <button type="button" data-domain="missile" aria-pressed="false">Missiles</button>
+    </div>
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" data-tab="performance" aria-pressed="true">Performance</button>
+      <button type="button" data-tab="spec" aria-pressed="false">Spec</button>
+    </div>
+    <div class="seg" role="group" aria-label="Layout">
+      <button type="button" data-mode="overlay" aria-pressed="true">Overlay</button>
+      <button type="button" data-mode="small" aria-pressed="false">Small multiples</button>
+    </div>
+    <div class="seg" role="group" aria-label="Units">
+      <button type="button" data-units="metric" aria-pressed="true">Metric</button>
+      <button type="button" data-units="mc" aria-pressed="false">Minecraft</button>
+    </div>
+    <label class="field">
+      <span>Altitude</span>
+      <input type="range" id="alt" min="0" max="8000" step="250" value="0">
+      <span class="val" id="altv">0 m</span>
+    </label>
+    <label class="field" id="tgtfield" hidden>
+      <span>Target speed</span>
+      <input type="range" id="tgt" min="100" max="500" step="10" value="340">
+      <span class="val" id="tgtv">340 m/s</span>
+    </label>
+    <label class="field" id="lchfield" hidden title="Launch speed for the Speed vs time chart. Double-click to return to each round's reference shot.">
+      <span>Launch speed</span>
+      <input type="range" id="lch" min="0" max="800" step="10" value="340">
+      <span class="val" id="lchv">ref</span>
+    </label>
+    <div class="seg" role="group" aria-label="Axis ceilings">
+      <button type="button" id="axistoggle" aria-pressed="false"
+              aria-controls="axisrail">Axes</button>
+    </div>
+  </div>
+
+  <div class="axisrail" id="axisrail" hidden>
+    <label class="field">
+      <span>Speed</span>
+      <input type="number" id="ax-speed" min="0" step="any" inputmode="decimal">
+      <span class="unit" id="ax-speed-u"></span>
+    </label>
+    <label class="field">
+      <span>Speed vs time</span>
+      <input type="number" id="ax-speedTrace" min="0" step="any" inputmode="decimal">
+      <span class="unit" id="ax-speedTrace-u"></span>
+    </label>
+    <label class="field">
+      <span>Altitude</span>
+      <input type="number" id="ax-altitude" min="0" step="any" inputmode="decimal">
+      <span class="unit" id="ax-altitude-u"></span>
+    </label>
+    <label class="field">
+      <span>Load</span>
+      <input type="number" id="ax-load" min="0" step="any" inputmode="decimal">
+      <span class="unit" id="ax-load-u"></span>
+    </label>
+    <button class="btn" type="button" id="axreset">Reset axes</button>
+    <p class="hint" id="axhint"></p>
+  </div>
+
+  <div class="picker" id="picker"></div>
+  <p class="picker-note" id="pickernote"></p>
+
+  <main id="main"></main>
+
+  <div class="drop" id="drop">
+    <p><strong>Load an aircraft, a missile or an environment.</strong> Drop
+      <code>.json</code> here &mdash; a whole folder works too and is read
+      recursively &mdash; comments and trailing commas are fine. The mod's
+      defaults are built in. A dropped file whose <code>id</code> matches one
+      already loaded replaces it in place, a new <code>id</code> joins them, and
+      selecting several at once highlights the fields where they differ in the spec table.</p>
+    <p><strong>environment.json</strong> is the exception: it adds no series
+      but replaces the air everything else is measured in, so dropping one
+      recomputes every curve on the page. Until you do, the built-in one is
+      used &mdash; the byline says which is in force.</p>
+    <input type="file" id="file" multiple accept=".json,application/json" hidden>
+    <input type="file" id="folder" webkitdirectory hidden>
+    <button class="btn" type="button" id="browse">Choose files</button>
+    <button class="btn" type="button" id="browseFolder">Choose folder</button>
+    <button class="btn" type="button" id="reset" hidden>Clear all</button>
+  </div>
+
+  <p class="note" id="footnote"></p>
+
+</div>
+
+<script id="bundle" type="application/json">{"stamp":"2026-09-29","environment":{"altitudeScale":1.0,"seaLevelY":63.0,"gravity":9.81,"densityCurve":[[0,1.225],[1000,1.1117],[2000,1.0066],[3000,0.9093],[4000,0.8194],[5000,0.7364],[6000,0.6601],[7000,0.59],[8000,0.5258],[9000,0.4671],[10000,0.4135],[11000,0.3639],[12000,0.3119],[13000,0.2666],[14000,0.2279],[16000,0.1665],[18000,0.1216],[20000,0.0889],[24000,0.0469],[28000,0.0251]],"speedOfSoundCurve":[[0,340.0],[1000,336.4],[2000,332.6],[3000,328.6],[4000,324.6],[5000,320.6],[6000,316.4],[7000,312.4],[8000,308.2],[9000,303.8],[10000,299.6],[11000,295.2],[20000,295.2],[28000,300.0]],"debug":{"telemetry":false,"intervalTicks":20}},"aircraft":{"f15":{"id":"f15","mass":16352,"wingArea":56.5,"engine":{"thrustAltitudeCurve":[[0,129800.0],[1000,120571.0],[2000,111805.0],[3000,103492.0],[4000,95620.0],[5000,88165.0],[6000,81132.0],[7000,74497.0],[8000,68252.0],[9000,62380.0],[10000,56861.0],[11000,51599.0],[12000,45893.0],[14000,36156.0],[16000,28482.0],[18000,22431.0],[20000,17679.0],[24000,10874.0]],"afterburnerThrustMultiplier":1.629,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.98],[0.9,1.04],[1.0,1.1],[1.2,1.28],[1.4,1.48],[1.6,1.68],[1.8,1.86],[2.0,2.02],[2.2,2.14],[2.5,2.26],[3.0,2.35]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.493],[-55.0,-0.7401],[-46.7,-0.9535],[-40.6,-1.0683],[-35.7,-1.1669],[-32.0,-1.248],[-28.3,-1.1794],[-24.6,-1.0733],[-19.7,-0.8898],[-14.8,-0.6926],[-9.9,-0.4867],[-7.4,-0.3744],[-5.0,-0.2621],[-3.2,-0.186],[-1.6,-0.1161],[0.0,0.0592],[1.6,0.1488],[3.2,0.2384],[5.0,0.336],[7.4,0.48],[9.9,0.624],[14.8,0.888],[19.7,1.1408],[24.6,1.376],[28.3,1.512],[32.0,1.6],[35.7,1.496],[40.6,1.3696],[46.7,1.2224],[55.0,0.9488],[70.0,0.632],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,1.91886],[-90.0,1.91886],[-70.0,1.33416],[-55.0,0.99268],[-46.7,0.84759],[-40.6,0.76583],[-35.7,0.71979],[-32.0,0.4346],[-28.3,0.39007],[-24.6,0.32615],[-19.7,0.22981],[-14.8,0.14635],[-9.9,0.08142],[-7.4,0.05555],[-5.0,0.03643],[-3.2,0.02732],[-1.6,0.02167],[0.0,0.019],[1.6,0.02399],[3.2,0.03326],[5.0,0.04826],[7.4,0.07968],[9.9,0.1222],[14.8,0.22895],[19.7,0.36612],[24.6,0.52443],[28.3,0.62947],[32.0,0.70271],[35.7,0.71979],[40.6,0.76583],[46.7,0.84759],[55.0,0.99268],[70.0,1.33416],[90.0,1.91886]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00262],[0.82,0.00775],[0.888,0.01587],[0.945,0.02291],[1.013,0.02921],[1.1,0.03084],[1.2,0.03114],[1.3,0.02851],[1.4,0.02596],[1.6,0.02205],[1.8,0.0197],[2.0,0.0178],[2.2,0.01625],[2.5,0.01437],[3.0,0.01206]],"liftAltitudeMultiplierCurve":[[0,1.0],[8502.0,1.0],[8702.0,0.972],[8902.0,0.896],[9102.0,0.784],[9302.0,0.648],[9502.0,0.5],[9702.0,0.352],[9902.0,0.216],[10102.0,0.104],[10302.0,0.028],[10502.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":30,"limiterSoftStartAngleOfAttack":23,"structuralSpeedLimitCurve":[[0,405.0],[1000,405.0],[2000,439.0],[3000,496.0],[4000,548.0],[5000,586.0],[6000,620.0],[7000,653.0],[8000,682.0],[9000,707.0],[10000,707.0],[11000,738.0],[13000,738.0],[15000,738.0],[18000,738.0],[21000,739.5]]},"response":{"maxPitchRate":85,"maxRollRate":220,"maxYawRate":15,"pitchRateResponse":0.5,"rollRateResponse":0.6,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.05,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.9,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":316,"afterburnerLevelSpeed":387},"radar":{"horizontalScan":150,"verticalScan":150,"scanRateHz":10,"lockRange":32856,"trackMemorySeconds":0.5,"maxContacts":8,"acquireMargin":0.94,"velocityGate":15,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":7629,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.178],[0.2,0.763],[0.4,1.17],[0.6,1.551],[0.8,2.009],[1,2.543]],"afterburnerFlowMultiplier":4.17},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":180,"chaff":120,"flare":60},"flightControl":{"fullAuthoritySpeed":145,"rollTaperOnsetSpeed":280,"rollHighPressureTaper":0.2,"pitchAuthorityExponent":0.65,"rollAuthorityExponent":0.55,"yawAuthorityExponent":0.88,"angleOfAttackCaptureSeconds":0.28,"limitSoftness":0.24,"storesAsymmetryTrim":0.7},"inertia":{"rollInertia":40781,"pitchInertia":245692,"yawInertia":289616,"rollControlMoment":434966.0,"pitchControlMoment":759357.0,"yawControlMoment":89201,"rollDamping":837,"pitchDamping":2767,"yawDamping":3159,"stationSpanMetres":[-5.1,5.1,-3.4,3.4,-1.2,1.2],"storesArmMetres":0.7,"fuelRollArmMetres":1.96,"fuelPitchArmMetres":2.15},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"f15e":{"id":"f15e","mass":18465,"wingArea":56.5,"engine":{"thrustAltitudeCurve":[[0,158200.0],[1000,146951.0],[2000,136268.0],[3000,126136.0],[4000,116541.0],[5000,107456.0],[6000,98884.0],[7000,90797.0],[8000,83185.0],[9000,76028.0],[10000,69302.0],[11000,62888.0],[12000,55934.0],[14000,44067.0],[16000,34713.0],[18000,27338.0],[20000,21547.0],[24000,13253.0]],"afterburnerThrustMultiplier":1.638,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.98],[0.9,1.04],[1.0,1.1],[1.2,1.28],[1.4,1.48],[1.6,1.68],[1.8,1.86],[2.0,2.02],[2.2,2.14],[2.5,2.26],[3.0,2.35]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.4776],[-55.0,-0.717],[-43.8,-0.9237],[-38.1,-1.0349],[-33.5,-1.1305],[-30.0,-1.209],[-26.6,-1.1425],[-23.1,-1.0397],[-18.4,-0.8621],[-13.8,-0.671],[-9.3,-0.4715],[-7.0,-0.3627],[-4.7,-0.2539],[-3.0,-0.1801],[-1.5,-0.1125],[0.0,0.0573],[1.5,0.1442],[3.0,0.2309],[4.7,0.3255],[7.0,0.465],[9.3,0.6045],[13.8,0.8603],[18.4,1.1052],[23.1,1.333],[26.6,1.4647],[30.0,1.55],[33.5,1.4493],[38.1,1.3268],[43.8,1.1842],[55.0,0.9192],[70.0,0.6123],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.17281],[-90.0,2.17281],[-70.0,1.6214],[-55.0,1.29527],[-43.8,1.11215],[-38.1,1.04406],[-33.5,1.00548],[-30.0,0.61221],[-26.6,0.54925],[-23.1,0.45892],[-18.4,0.32292],[-13.8,0.20496],[-9.3,0.11319],[-7.0,0.07664],[-4.7,0.04963],[-3.0,0.03673],[-1.5,0.02877],[0.0,0.025],[1.5,0.03205],[3.0,0.04515],[4.7,0.06633],[7.0,0.11073],[9.3,0.17081],[13.8,0.32168],[18.4,0.51549],[23.1,0.73913],[26.6,0.88748],[30.0,0.99102],[33.5,1.00548],[38.1,1.04406],[43.8,1.11215],[55.0,1.29527],[70.0,1.6214],[90.0,2.17281]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00353],[0.82,0.01042],[0.888,0.02134],[0.945,0.03081],[1.013,0.03792],[1.1,0.03919],[1.2,0.03919],[1.3,0.03608],[1.4,0.03309],[1.6,0.02812],[1.8,0.02617],[2.0,0.02453],[2.2,0.02313],[2.5,0.02139],[3.0,0.01913]],"liftAltitudeMultiplierCurve":[[0,1.0],[7960.0,1.0],[8160.0,0.972],[8360.0,0.896],[8560.0,0.784],[8760.0,0.648],[8960.0,0.5],[9160.0,0.352],[9360.0,0.216],[9560.0,0.104],[9760.0,0.028],[9960.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":28,"limiterSoftStartAngleOfAttack":22,"structuralSpeedLimitCurve":[[0,390.0],[1000,390.0],[2000,409.9],[3000,435.0],[4000,485.0],[5000,536.0],[6000,563.0],[7000,590.0],[8000,618.0],[9000,622.0],[10000,639.5],[11000,679.0],[13000,679.0],[15000,679.0],[18000,679.0],[21000,680.3]]},"response":{"maxPitchRate":78,"maxRollRate":180,"maxYawRate":15,"pitchRateResponse":0.45,"rollRateResponse":0.5,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.04,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.45,"yawStability":0.95,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":310,"afterburnerLevelSpeed":373},"radar":{"horizontalScan":150,"verticalScan":150,"scanRateHz":40,"lockRange":32856,"trackMemorySeconds":3,"maxContacts":8,"acquireMargin":0.94,"velocityGate":13,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":7625,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.178],[0.2,0.762],[0.4,1.169],[0.6,1.55],[0.8,2.008],[1,2.542]],"afterburnerFlowMultiplier":4.19},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":240,"chaff":120,"flare":120},"flightControl":{"fullAuthoritySpeed":155,"rollTaperOnsetSpeed":270,"rollHighPressureTaper":0.25,"pitchAuthorityExponent":0.7,"rollAuthorityExponent":0.6,"yawAuthorityExponent":0.9,"angleOfAttackCaptureSeconds":0.32,"limitSoftness":0.26,"storesAsymmetryTrim":0.7},"inertia":{"rollInertia":52514,"pitchInertia":300997,"yawInertia":351722,"rollControlMoment":343703.0,"pitchControlMoment":706490.0,"yawControlMoment":96927,"rollDamping":1146,"pitchDamping":3623,"yawDamping":3960,"stationSpanMetres":[-5.1,5.1,-3.4,3.4,-1.2,1.2,-0.6,0.6],"storesArmMetres":0.75,"fuelRollArmMetres":1.96,"fuelPitchArmMetres":2.15},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"f16":{"id":"f16","mass":10658,"wingArea":27.87,"engine":{"thrustAltitudeCurve":[[0,76300.0],[1000,70600.0],[2000,65208.0],[3000,60115.0],[4000,55311.0],[5000,50782.0],[6000,46527.0],[7000,42530.0],[8000,38786.0],[9000,35281.0],[10000,32003.0],[11000,28894.0],[12000,25540.0],[14000,19871.0],[16000,15458.0],[18000,12022.0],[20000,9357.0],[24000,5610.0]],"afterburnerThrustMultiplier":1.717,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.05],[1.0,1.1],[1.2,1.27],[1.4,1.43],[1.6,1.56],[1.8,1.65],[2.0,1.71],[2.2,1.75],[2.5,1.79],[3.0,1.83]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.6008],[-55.0,-0.9019],[-46.7,-1.162],[-40.6,-1.302],[-35.7,-1.4222],[-32.0,-1.521],[-28.3,-1.4373],[-24.6,-1.3081],[-19.7,-1.0844],[-14.8,-0.8442],[-9.9,-0.5932],[-7.4,-0.4563],[-5.0,-0.3194],[-3.2,-0.2266],[-1.6,-0.1414],[0.0,0.0721],[1.6,0.1813],[3.2,0.2905],[5.0,0.4095],[7.4,0.585],[9.9,0.7605],[14.8,1.0823],[19.7,1.3903],[24.6,1.677],[28.3,1.8427],[32.0,1.95],[35.7,1.8233],[40.6,1.6692],[46.7,1.4898],[55.0,1.1563],[70.0,0.7702],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,1.96075],[-90.0,1.96075],[-70.0,1.33573],[-55.0,0.9707],[-46.7,0.8156],[-40.6,0.72819],[-35.7,0.67898],[-32.0,0.40928],[-28.3,0.36747],[-24.6,0.30757],[-19.7,0.2172],[-14.8,0.13897],[-9.9,0.07805],[-7.4,0.05379],[-5.0,0.03585],[-3.2,0.02729],[-1.6,0.022],[0.0,0.0195],[1.6,0.02417],[3.2,0.03288],[5.0,0.04694],[7.4,0.07641],[9.9,0.11629],[14.8,0.21643],[19.7,0.34502],[24.6,0.49352],[28.3,0.59201],[32.0,0.66073],[35.7,0.67898],[40.6,0.72819],[46.7,0.8156],[55.0,0.9707],[70.0,1.33573],[90.0,1.96075]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.0042],[0.82,0.0126],[0.888,0.02605],[0.945,0.03698],[1.013,0.04237],[1.1,0.0421],[1.2,0.04178],[1.3,0.03905],[1.4,0.03639],[1.6,0.03147],[1.8,0.03063],[2.0,0.0299],[2.2,0.02924],[2.5,0.02839],[3.0,0.02721]],"liftAltitudeMultiplierCurve":[[0,1.0],[7497.0,1.0],[7697.0,0.972],[7897.0,0.896],[8097.0,0.784],[8297.0,0.648],[8497.0,0.5],[8697.0,0.352],[8897.0,0.216],[9097.0,0.104],[9297.0,0.028],[9497.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":26,"limiterSoftStartAngleOfAttack":20,"structuralSpeedLimitCurve":[[0,410.0],[1000,410.0],[2000,434.0],[3000,460.0],[4000,486.0],[5000,515.0],[6000,532.1],[7000,562.8],[8000,596.2],[9000,622.8],[10000,622.8],[11000,614.2],[13000,605.2],[15000,605.2],[18000,605.2],[21000,606.4]]},"response":{"maxPitchRate":100,"maxRollRate":320,"maxYawRate":15,"pitchRateResponse":0.7,"rollRateResponse":0.8,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.06,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.85,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":309,"afterburnerLevelSpeed":393},"radar":{"horizontalScan":120,"verticalScan":60,"scanRateHz":1,"lockRange":23703,"trackMemorySeconds":1.25,"maxContacts":6,"acquireMargin":0.94,"velocityGate":15,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":3969,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.093],[0.2,0.397],[0.4,0.609],[0.6,0.807],[0.8,1.045],[1,1.323]],"afterburnerFlowMultiplier":4.4},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":120,"chaff":60,"flare":60},"flightControl":{"fullAuthoritySpeed":140,"rollTaperOnsetSpeed":270,"rollHighPressureTaper":0.25,"pitchAuthorityExponent":0.6,"rollAuthorityExponent":0.5,"yawAuthorityExponent":0.85,"angleOfAttackCaptureSeconds":0.2,"limitSoftness":0.2,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":10581,"pitchInertia":70795,"yawInertia":85208,"rollControlMoment":268616.0,"pitchControlMoment":325159.0,"yawControlMoment":27884,"rollDamping":194,"pitchDamping":588,"yawDamping":875,"stationSpanMetres":[-3.4,3.4,-2.1,2.1],"storesArmMetres":0.5,"fuelRollArmMetres":1.42,"fuelPitchArmMetres":1.51},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"f18":{"id":"f18","mass":13605,"wingArea":37.16,"engine":{"thrustAltitudeCurve":[[0,97800.0],[1000,90319.0],[2000,83255.0],[3000,76596.0],[4000,70329.0],[5000,64432.0],[6000,58904.0],[7000,53724.0],[8000,48881.0],[9000,44359.0],[10000,40140.0],[11000,36147.0],[12000,31854.0],[14000,24627.0],[16000,19038.0],[18000,14713.0],[20000,11381.0],[24000,6736.0]],"afterburnerThrustMultiplier":1.609,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.04],[1.0,1.08],[1.2,1.2],[1.4,1.31],[1.6,1.39],[1.8,1.43],[2.0,1.46],[2.5,1.51],[3.0,1.55]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.647],[-55.0,-0.9713],[-49.6,-1.2514],[-43.2,-1.4021],[-37.9,-1.5315],[-34.0,-1.638],[-30.1,-1.5479],[-26.2,-1.4087],[-20.9,-1.1679],[-15.7,-0.9091],[-10.5,-0.6388],[-7.9,-0.4914],[-5.3,-0.344],[-3.4,-0.2441],[-1.7,-0.1523],[0.0,0.0777],[1.7,0.1953],[3.4,0.3129],[5.3,0.441],[7.9,0.63],[10.5,0.819],[15.7,1.1655],[20.9,1.4973],[26.2,1.806],[30.1,1.9845],[34.0,2.1],[37.9,1.9635],[43.2,1.7976],[49.6,1.6044],[55.0,1.2453],[70.0,0.8295],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.29919],[-90.0,2.29919],[-70.0,1.69534],[-55.0,1.34762],[-49.6,1.2493],[-43.2,1.15542],[-37.9,1.10092],[-34.0,0.66671],[-30.1,0.59779],[-26.2,0.49898],[-20.9,0.35003],[-15.7,0.22097],[-10.5,0.12052],[-7.9,0.08053],[-5.3,0.05097],[-3.4,0.03686],[-1.7,0.02813],[0.0,0.024],[1.7,0.03171],[3.4,0.04605],[5.3,0.06924],[7.9,0.11784],[10.5,0.18359],[15.7,0.34868],[20.9,0.5608],[26.2,0.80563],[30.1,0.96807],[34.0,1.08133],[37.9,1.10092],[43.2,1.15542],[49.6,1.2493],[55.0,1.34762],[70.0,1.69534],[90.0,2.29919]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.00045],[0.724,0.00625],[0.82,0.01793],[0.888,0.03262],[0.945,0.04165],[1.013,0.04148],[1.1,0.03586],[1.2,0.02971],[1.3,0.0278],[1.4,0.02595],[1.6,0.02268],[1.8,0.02174],[2.0,0.02095],[2.2,0.02025],[2.5,0.01935],[3.0,0.01814]],"liftAltitudeMultiplierCurve":[[0,1.0],[7354.0,1.0],[7554.0,0.972],[7754.0,0.896],[7954.0,0.784],[8154.0,0.648],[8354.0,0.5],[8554.0,0.352],[8754.0,0.216],[8954.0,0.104],[9154.0,0.028],[9354.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":10.5,"maxNegativeG":-3,"limiterAngleOfAttack":35,"limiterSoftStartAngleOfAttack":27,"structuralSpeedLimitCurve":[[0,355.0],[1000,355.0],[2000,413.0],[3000,426.0],[4000,439.0],[5000,455.0],[6000,469.0],[7000,487.3],[8000,516.2],[9000,546.8],[10000,546.8],[11000,539.3],[13000,531.4],[15000,531.4],[18000,531.4],[21000,532.4]]},"response":{"maxPitchRate":118,"maxRollRate":230,"maxYawRate":15,"pitchRateResponse":0.7,"rollRateResponse":0.7,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.1,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.85,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":294,"afterburnerLevelSpeed":337},"radar":{"horizontalScan":140,"verticalScan":100,"scanRateHz":5,"lockRange":32856,"trackMemorySeconds":0.5,"maxContacts":8,"acquireMargin":0.94,"velocityGate":13,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":6125,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.143],[0.2,0.612],[0.4,0.939],[0.6,1.245],[0.8,1.613],[1,2.042]],"afterburnerFlowMultiplier":4.12},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":120,"chaff":60,"flare":60},"flightControl":{"fullAuthoritySpeed":115,"rollTaperOnsetSpeed":230,"rollHighPressureTaper":0.45,"pitchAuthorityExponent":0.5,"rollAuthorityExponent":0.45,"yawAuthorityExponent":0.8,"angleOfAttackCaptureSeconds":0.2,"limitSoftness":0.2,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":20358,"pitchInertia":126835,"yawInertia":152501,"rollControlMoment":272407.0,"pitchControlMoment":725598.0,"yawControlMoment":57035,"rollDamping":395,"pitchDamping":1165,"yawDamping":1901,"stationSpanMetres":[-4.4,4.4,-3,3,-1.3,1.3],"storesArmMetres":0.6,"fuelRollArmMetres":1.71,"fuelPitchArmMetres":1.74},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"f4j":{"id":"f4j","mass":17560,"wingArea":49.24,"engine":{"thrustAltitudeCurve":[[0,105600.0],[1000,97901.0],[2000,90604.0],[3000,83697.0],[4000,77169.0],[5000,71001.0],[6000,65195.0],[7000,59729.0],[8000,54596.0],[9000,49780.0],[10000,45266.0],[11000,40972.0],[12000,36329.0],[14000,28442.0],[16000,22265.0],[18000,17425.0],[20000,13648.0],[24000,8288.0]],"afterburnerThrustMultiplier":1.508,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.06],[1.0,1.13],[1.2,1.33],[1.4,1.57],[1.6,1.83],[1.8,2.09],[2.0,2.34],[2.2,2.56],[2.5,2.78],[3.0,2.95]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.416],[-55.0,-0.6244],[-38.0,-0.8045],[-33.0,-0.9014],[-29.0,-0.9846],[-26.0,-1.053],[-23.0,-0.995],[-20.0,-0.9056],[-16.0,-0.7508],[-12.0,-0.5845],[-8.0,-0.4107],[-6.0,-0.3159],[-4.0,-0.2211],[-2.6,-0.1569],[-1.3,-0.0979],[0.0,0.05],[1.3,0.1255],[2.6,0.2011],[4.0,0.2835],[6.0,0.405],[8.0,0.5265],[12.0,0.7493],[16.0,0.9626],[20.0,1.161],[23.0,1.2757],[26.0,1.35],[29.0,1.2623],[33.0,1.1556],[38.0,1.0314],[55.0,0.8005],[70.0,0.5333],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.38568],[-90.0,2.38568],[-70.0,1.59823],[-55.0,1.12226],[-38.0,0.73168],[-33.0,0.65609],[-29.0,0.61377],[-26.0,0.37363],[-23.0,0.33624],[-20.0,0.28279],[-16.0,0.2021],[-12.0,0.13222],[-8.0,0.07779],[-6.0,0.05612],[-4.0,0.04009],[-2.6,0.03247],[-1.3,0.02773],[0.0,0.0255],[1.3,0.02968],[2.6,0.03744],[4.0,0.05001],[6.0,0.07633],[8.0,0.11194],[12.0,0.20138],[16.0,0.31629],[20.0,0.44887],[23.0,0.53681],[26.0,0.5982],[29.0,0.61377],[33.0,0.65609],[38.0,0.73168],[55.0,1.12226],[70.0,1.59823],[90.0,2.38568]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.00046],[0.724,0.00397],[0.82,0.01112],[0.888,0.01841],[0.945,0.02145],[1.013,0.02264],[1.1,0.02263],[1.2,0.02227],[1.3,0.02044],[1.4,0.01865],[1.6,0.01593],[1.8,0.01417],[2.0,0.01276],[2.2,0.01161],[2.5,0.01023],[3.0,0.00853]],"liftAltitudeMultiplierCurve":[[0,1.0],[8121.0,1.0],[8321.0,0.972],[8521.0,0.896],[8721.0,0.784],[8921.0,0.648],[9121.0,0.5],[9321.0,0.352],[9521.0,0.216],[9721.0,0.104],[9921.0,0.028],[10121.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":11.5,"maxNegativeG":-3,"limiterAngleOfAttack":22,"limiterSoftStartAngleOfAttack":17,"structuralSpeedLimitCurve":[[0,380.0],[1000,380.0],[2000,399.3],[3000,420.2],[4000,459.0],[5000,513.0],[6000,562.0],[7000,607.0],[8000,648.0],[9000,676.0],[10000,676.0],[11000,649.4],[13000,649.4],[15000,649.4],[18000,649.4],[21000,650.8]]},"response":{"maxPitchRate":70,"maxRollRate":150,"maxYawRate":15,"pitchRateResponse":0.38,"rollRateResponse":0.4,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.03,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.6,"yawStability":1.0,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":295,"afterburnerLevelSpeed":363},"radar":{"horizontalScan":120,"verticalScan":12,"scanRateHz":0.5,"lockRange":23535,"trackMemorySeconds":2.5,"maxContacts":3,"acquireMargin":0.94,"velocityGate":30,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":7500,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.175],[0.2,0.75],[0.4,1.15],[0.6,1.525],[0.8,1.975],[1,2.5]],"afterburnerFlowMultiplier":3.86},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":60,"chaff":30,"flare":30},"flightControl":{"fullAuthoritySpeed":170,"rollTaperOnsetSpeed":240,"rollHighPressureTaper":0.35,"pitchAuthorityExponent":0.8,"rollAuthorityExponent":0.7,"yawAuthorityExponent":1.0,"angleOfAttackCaptureSeconds":0.45,"limitSoftness":0.32,"storesAsymmetryTrim":0.35},"inertia":{"rollInertia":40175,"pitchInertia":247294,"yawInertia":286390,"rollControlMoment":175297.0,"pitchControlMoment":402835.0,"yawControlMoment":78923,"rollDamping":899,"pitchDamping":3753,"yawDamping":3703,"stationSpanMetres":[-3.6,3.6,-1.2,1.2],"storesArmMetres":0.7,"fuelRollArmMetres":1.75,"fuelPitchArmMetres":2.01},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"j10c":{"id":"j10c","mass":11700,"wingArea":39,"engine":{"thrustAltitudeCurve":[[0,89200.0],[1000,82697.0],[2000,76533.0],[3000,70699.0],[4000,65185.0],[5000,59975.0],[6000,55070.0],[7000,50453.0],[8000,46117.0],[9000,42049.0],[10000,38236.0],[11000,34609.0],[12000,30687.0],[14000,24025.0],[16000,18807.0],[18000,14719.0],[20000,11528.0],[24000,7001.0]],"afterburnerThrustMultiplier":1.592,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.05],[1.0,1.1],[1.2,1.27],[1.4,1.43],[1.6,1.56],[1.8,1.65],[2.0,1.71],[2.2,1.75],[2.5,1.79],[3.0,1.83]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.6624],[-55.0,-0.9944],[-48.2,-1.2812],[-41.9,-1.4355],[-36.8,-1.568],[-33.0,-1.677],[-29.2,-1.5847],[-25.4,-1.4422],[-20.3,-1.1957],[-15.2,-0.9308],[-10.2,-0.654],[-7.7,-0.5031],[-5.1,-0.3522],[-3.3,-0.2498],[-1.7,-0.1559],[0.0,0.0795],[1.7,0.1999],[3.3,0.3203],[5.1,0.4515],[7.7,0.645],[10.2,0.8385],[15.2,1.1933],[20.3,1.5329],[25.4,1.849],[29.2,2.0317],[33.0,2.15],[36.8,2.0103],[41.9,1.8404],[48.2,1.6426],[55.0,1.2749],[70.0,0.8492],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.12964],[-90.0,2.12964],[-70.0,1.58327],[-55.0,1.26636],[-48.2,1.15474],[-41.9,1.0734],[-36.8,1.0273],[-33.0,0.62168],[-29.2,0.55702],[-25.4,0.46438],[-20.3,0.32472],[-15.2,0.20373],[-10.2,0.10951],[-7.7,0.072],[-5.1,0.04428],[-3.3,0.03104],[-1.7,0.02286],[0.0,0.019],[1.7,0.02622],[3.3,0.03968],[5.1,0.06142],[7.7,0.107],[10.2,0.16865],[15.2,0.32348],[20.3,0.52233],[25.4,0.75194],[29.2,0.90422],[33.0,1.01048],[36.8,1.0273],[41.9,1.0734],[48.2,1.15474],[55.0,1.26636],[70.0,1.58327],[90.0,2.12964]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00235],[0.82,0.00673],[0.888,0.01299],[0.945,0.02072],[1.013,0.02816],[1.1,0.0309],[1.2,0.03074],[1.3,0.02801],[1.4,0.02535],[1.6,0.02034],[1.8,0.01988],[2.0,0.01946],[2.2,0.01909],[2.5,0.01861],[3.0,0.01794]],"liftAltitudeMultiplierCurve":[[0,1.0],[7975.0,1.0],[8175.0,0.972],[8375.0,0.896],[8575.0,0.784],[8775.0,0.648],[8975.0,0.5],[9175.0,0.352],[9375.0,0.216],[9575.0,0.104],[9775.0,0.028],[9975.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":28,"limiterSoftStartAngleOfAttack":22,"structuralSpeedLimitCurve":[[0,395.0],[1000,395.0],[2000,415.1],[3000,439.0],[4000,479.0],[5000,526.0],[6000,538.0],[7000,549.0],[8000,574.4],[9000,607.6],[10000,607.6],[11000,599.2],[13000,590.4],[15000,590.4],[18000,590.4],[21000,591.6]]},"response":{"maxPitchRate":105,"maxRollRate":270,"maxYawRate":15,"pitchRateResponse":0.7,"rollRateResponse":0.75,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.07,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.8,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":320,"afterburnerLevelSpeed":377},"radar":{"horizontalScan":140,"verticalScan":140,"scanRateHz":40,"lockRange":44844,"trackMemorySeconds":3,"maxContacts":16,"acquireMargin":0.94,"velocityGate":8,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":5625,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.131],[0.2,0.562],[0.4,0.863],[0.6,1.144],[0.8,1.481],[1,1.875]],"afterburnerFlowMultiplier":4.08},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":72,"chaff":36,"flare":36},"flightControl":{"fullAuthoritySpeed":130,"rollTaperOnsetSpeed":260,"rollHighPressureTaper":0.25,"pitchAuthorityExponent":0.55,"rollAuthorityExponent":0.5,"yawAuthorityExponent":0.85,"angleOfAttackCaptureSeconds":0.2,"limitSoftness":0.2,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":15901,"pitchInertia":105318,"yawInertia":129544,"rollControlMoment":299727.0,"pitchControlMoment":507909.0,"yawControlMoment":41359,"rollDamping":283,"pitchDamping":799,"yawDamping":1292,"stationSpanMetres":[-3.6,3.6,-2.4,2.4,-1.1,1.1],"storesArmMetres":0.55,"fuelRollArmMetres":1.46,"fuelPitchArmMetres":1.79},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"j8ii":{"id":"j8ii","mass":13220,"wingArea":42.2,"engine":{"thrustAltitudeCurve":[[0,94200.0],[1000,88013.0],[2000,82102.0],[3000,76463.0],[4000,71089.0],[5000,65968.0],[6000,61106.0],[7000,56487.0],[8000,52111.0],[9000,47967.0],[10000,44044.0],[11000,40276.0],[12000,36155.0],[14000,29025.0],[16000,23299.0],[18000,18699.0],[20000,15017.0],[24000,9598.0]],"afterburnerThrustMultiplier":1.456,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.06],[1.0,1.13],[1.2,1.33],[1.4,1.57],[1.6,1.83],[1.8,2.09],[2.0,2.34],[2.2,2.56],[2.5,2.78],[3.0,2.95]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.3697],[-55.0,-0.555],[-38.0,-0.7151],[-33.0,-0.8012],[-29.0,-0.8752],[-26.0,-0.936],[-23.0,-0.8845],[-20.0,-0.805],[-16.0,-0.6674],[-12.0,-0.5195],[-8.0,-0.365],[-6.0,-0.2808],[-4.0,-0.1966],[-2.6,-0.1395],[-1.3,-0.087],[0.0,0.0444],[1.3,0.1116],[2.6,0.1788],[4.0,0.252],[6.0,0.36],[8.0,0.468],[12.0,0.666],[16.0,0.8556],[20.0,1.032],[23.0,1.134],[26.0,1.2],[29.0,1.122],[33.0,1.0272],[38.0,0.9168],[55.0,0.7116],[70.0,0.474],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.34098],[-90.0,2.34098],[-70.0,1.61747],[-55.0,1.18015],[-38.0,0.82128],[-33.0,0.75184],[-29.0,0.71295],[-26.0,0.43331],[-23.0,0.38919],[-20.0,0.326],[-16.0,0.23066],[-12.0,0.14806],[-8.0,0.08377],[-6.0,0.05818],[-4.0,0.03926],[-2.6,0.03023],[-1.3,0.02464],[0.0,0.022],[1.3,0.02694],[2.6,0.03612],[4.0,0.05095],[6.0,0.08206],[8.0,0.12413],[12.0,0.22979],[16.0,0.36553],[20.0,0.52221],[23.0,0.62616],[26.0,0.69865],[29.0,0.71295],[33.0,0.75184],[38.0,0.82128],[55.0,1.18015],[70.0,1.61747],[90.0,2.34098]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00229],[0.82,0.0067],[0.888,0.01349],[0.945,0.02011],[1.013,0.02556],[1.1,0.02693],[1.2,0.0266],[1.3,0.02463],[1.4,0.02272],[1.6,0.01961],[1.8,0.01811],[2.0,0.01687],[2.2,0.01581],[2.5,0.0145],[3.0,0.01281]],"liftAltitudeMultiplierCurve":[[0,1.0],[8540.0,1.0],[8740.0,0.972],[8940.0,0.896],[9140.0,0.784],[9340.0,0.648],[9540.0,0.5],[9740.0,0.352],[9940.0,0.216],[10140.0,0.104],[10340.0,0.028],[10540.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":10,"maxNegativeG":-3,"limiterAngleOfAttack":22,"limiterSoftStartAngleOfAttack":17,"structuralSpeedLimitCurve":[[0,380.0],[1000,380.0],[2000,399.3],[3000,427.0],[4000,491.0],[5000,556.0],[6000,606.0],[7000,652.0],[8000,695.0],[9000,726.0],[10000,726.0],[11000,649.4],[13000,649.4],[15000,649.4],[18000,649.4],[21000,650.8]]},"response":{"maxPitchRate":75,"maxRollRate":170,"maxYawRate":15,"pitchRateResponse":0.4,"rollRateResponse":0.45,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.03,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.6,"yawStability":1.0,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":314,"afterburnerLevelSpeed":363},"radar":{"horizontalScan":120,"verticalScan":40,"scanRateHz":1,"lockRange":20340,"trackMemorySeconds":1.5,"maxContacts":4,"acquireMargin":0.94,"velocityGate":23,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":6750,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.158],[0.2,0.675],[0.4,1.035],[0.6,1.373],[0.8,1.778],[1,2.25]],"afterburnerFlowMultiplier":3.73},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":64,"chaff":32,"flare":32},"flightControl":{"fullAuthoritySpeed":170,"rollTaperOnsetSpeed":240,"rollHighPressureTaper":0.4,"pitchAuthorityExponent":0.8,"rollAuthorityExponent":0.7,"yawAuthorityExponent":1.0,"angleOfAttackCaptureSeconds":0.42,"limitSoftness":0.32,"storesAsymmetryTrim":0.35},"inertia":{"rollInertia":24193,"pitchInertia":165155,"yawInertia":191381,"rollControlMoment":138042.0,"pitchControlMoment":300260.0,"yawControlMoment":50103,"rollDamping":515,"pitchDamping":2402,"yawDamping":2227,"stationSpanMetres":[-3.2,3.2,-1.6,1.6],"storesArmMetres":0.6,"fuelRollArmMetres":1.4,"fuelPitchArmMetres":1.86},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"mig21":{"id":"mig21","mass":7686,"wingArea":23,"engine":{"thrustAltitudeCurve":[[0,40200.0],[1000,37487.0],[2000,34900.0],[3000,32437.0],[4000,30094.0],[5000,27867.0],[6000,25757.0],[7000,23756.0],[8000,21865.0],[9000,20079.0],[10000,18392.0],[11000,16775.0],[12000,15013.0],[14000,11977.0],[16000,9554.0],[18000,7619.0],[20000,6081.0],[24000,3837.0]],"afterburnerThrustMultiplier":1.731,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.06],[1.0,1.13],[1.2,1.33],[1.4,1.57],[1.6,1.83],[1.8,2.09],[2.0,2.34],[2.2,2.56],[2.5,2.78],[3.0,2.95]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.4005],[-55.0,-0.6013],[-40.9,-0.7747],[-35.6,-0.868],[-31.2,-0.9481],[-28.0,-1.014],[-24.8,-0.9582],[-21.6,-0.872],[-17.2,-0.723],[-12.9,-0.5628],[-8.7,-0.3955],[-6.5,-0.3042],[-4.3,-0.2129],[-2.8,-0.1511],[-1.4,-0.0943],[0.0,0.0481],[1.4,0.1209],[2.8,0.1937],[4.3,0.273],[6.5,0.39],[8.7,0.507],[12.9,0.7215],[17.2,0.9269],[21.6,1.118],[24.8,1.2285],[28.0,1.3],[31.2,1.2155],[35.6,1.1128],[40.9,0.9932],[55.0,0.7709],[70.0,0.5135],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.44636],[-90.0,2.44636],[-70.0,1.5586],[-55.0,1.02751],[-40.9,0.65936],[-35.6,0.56318],[-31.2,0.50729],[-28.0,0.30437],[-24.8,0.27391],[-21.6,0.23026],[-17.2,0.1645],[-12.9,0.1075],[-8.7,0.06314],[-6.5,0.04547],[-4.3,0.0324],[-2.8,0.02617],[-1.4,0.02232],[0.0,0.0205],[1.4,0.0239],[2.8,0.03024],[4.3,0.04048],[6.5,0.06195],[8.7,0.09098],[12.9,0.16389],[17.2,0.25758],[21.6,0.36572],[24.8,0.43747],[28.0,0.48749],[31.2,0.50729],[35.6,0.56318],[40.9,0.65936],[55.0,1.02751],[70.0,1.5586],[90.0,2.44636]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.00027],[0.724,0.00373],[0.82,0.01072],[0.888,0.01951],[0.945,0.02491],[1.013,0.02777],[1.1,0.02777],[1.2,0.02755],[1.3,0.02557],[1.4,0.02365],[1.6,0.02058],[1.8,0.0189],[2.0,0.01752],[2.2,0.01634],[2.5,0.0149],[3.0,0.01307]],"liftAltitudeMultiplierCurve":[[0,1.0],[8163.0,1.0],[8363.0,0.972],[8563.0,0.896],[8763.0,0.784],[8963.0,0.648],[9163.0,0.5],[9363.0,0.352],[9563.0,0.216],[9763.0,0.104],[9963.0,0.028],[10163.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":11.5,"maxNegativeG":-3,"limiterAngleOfAttack":24,"limiterSoftStartAngleOfAttack":19,"structuralSpeedLimitCurve":[[0,360.0],[1000,360.0],[2000,378.3],[3000,398.1],[4000,419.3],[5000,468.0],[6000,539.0],[7000,590.0],[8000,640.0],[9000,683.0],[10000,683.0],[11000,605.2],[13000,605.2],[15000,605.2],[18000,605.2],[21000,606.4]]},"response":{"maxPitchRate":85,"maxRollRate":220,"maxYawRate":15,"pitchRateResponse":0.45,"rollRateResponse":0.6,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.03,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.55,"yawStability":1.0,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":289,"afterburnerLevelSpeed":342},"radar":{"horizontalScan":60,"verticalScan":24,"scanRateHz":0.5,"lockRange":25947,"trackMemorySeconds":2.5,"maxContacts":2,"acquireMargin":0.94,"velocityGate":30,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":3600,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.084],[0.2,0.36],[0.4,0.552],[0.6,0.732],[0.8,0.948],[1,1.2]],"afterburnerFlowMultiplier":4.43},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":32,"chaff":16,"flare":16},"flightControl":{"fullAuthoritySpeed":170,"rollTaperOnsetSpeed":210,"rollHighPressureTaper":0.6,"pitchAuthorityExponent":0.8,"rollAuthorityExponent":0.7,"yawAuthorityExponent":1.0,"angleOfAttackCaptureSeconds":0.36,"limitSoftness":0.3,"storesAsymmetryTrim":0.3},"inertia":{"rollInertia":5887,"pitchInertia":39915,"yawInertia":49142,"rollControlMoment":70639.0,"pitchControlMoment":98692.0,"yawControlMoment":15136,"rollDamping":103,"pitchDamping":516,"yawDamping":592,"stationSpanMetres":[-2.6,2.6,-1.4,1.4],"storesArmMetres":0.45,"fuelRollArmMetres":1.07,"fuelPitchArmMetres":1.37},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"mig23":{"id":"mig23","mass":12950,"wingArea":37.35,"engine":{"thrustAltitudeCurve":[[0,83600.0],[1000,77807.0],[2000,72294.0],[3000,67055.0],[4000,62083.0],[5000,57365.0],[6000,52905.0],[7000,48687.0],[8000,44709.0],[9000,40959.0],[10000,37426.0],[11000,34050.0],[12000,30378.0],[14000,24083.0],[16000,19091.0],[18000,15130.0],[20000,12000.0],[24000,7476.0]],"afterburnerThrustMultiplier":1.519,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.06],[1.0,1.13],[1.2,1.33],[1.4,1.57],[1.6,1.83],[1.8,2.09],[2.0,2.34],[2.2,2.56],[2.5,2.78],[3.0,2.95]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.4005],[-55.0,-0.6013],[-38.0,-0.7747],[-33.0,-0.868],[-29.0,-0.9481],[-26.0,-1.014],[-23.0,-0.9582],[-20.0,-0.872],[-16.0,-0.723],[-12.0,-0.5628],[-8.0,-0.3955],[-6.0,-0.3042],[-4.0,-0.2129],[-2.6,-0.1511],[-1.3,-0.0943],[0.0,0.0481],[1.3,0.1209],[2.6,0.1937],[4.0,0.273],[6.0,0.39],[8.0,0.507],[12.0,0.7215],[16.0,0.9269],[20.0,1.118],[23.0,1.2285],[26.0,1.3],[29.0,1.2155],[33.0,1.1128],[38.0,0.9932],[55.0,0.7709],[70.0,0.5135],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.38176],[-90.0,2.38176],[-70.0,1.60331],[-55.0,1.13276],[-38.0,0.74664],[-33.0,0.67191],[-29.0,0.63008],[-26.0,0.38169],[-23.0,0.34294],[-20.0,0.2874],[-16.0,0.20372],[-12.0,0.1312],[-8.0,0.07475],[-6.0,0.05226],[-4.0,0.03564],[-2.6,0.02772],[-1.3,0.02282],[0.0,0.0205],[1.3,0.02482],[2.6,0.03289],[4.0,0.04592],[6.0,0.07323],[8.0,0.11018],[12.0,0.20296],[16.0,0.32216],[20.0,0.45975],[23.0,0.55103],[26.0,0.61469],[29.0,0.63008],[33.0,0.67191],[38.0,0.74664],[55.0,1.13276],[70.0,1.60331],[90.0,2.38176]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00242],[0.82,0.00726],[0.888,0.01499],[0.945,0.02128],[1.013,0.02669],[1.1,0.02783],[1.2,0.02847],[1.3,0.02738],[1.4,0.02612],[1.6,0.02436],[1.8,0.02147],[2.0,0.01917],[2.2,0.01731],[2.5,0.01509],[3.0,0.01242]],"liftAltitudeMultiplierCurve":[[0,1.0],[8237.0,1.0],[8437.0,0.972],[8637.0,0.896],[8837.0,0.784],[9037.0,0.648],[9237.0,0.5],[9437.0,0.352],[9637.0,0.216],[9837.0,0.104],[10037.0,0.028],[10237.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":11.5,"maxNegativeG":-3,"limiterAngleOfAttack":22,"limiterSoftStartAngleOfAttack":17,"structuralSpeedLimitCurve":[[0,395.0],[1000,395.0],[2000,415.1],[3000,437.0],[4000,471.0],[5000,509.0],[6000,583.0],[7000,653.0],[8000,704.0],[9000,741.0],[10000,741.0],[11000,693.7],[13000,693.7],[15000,693.7],[18000,693.7],[21000,695.1]]},"response":{"maxPitchRate":72,"maxRollRate":170,"maxYawRate":15,"pitchRateResponse":0.4,"rollRateResponse":0.45,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.03,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.6,"yawStability":1.0,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":314,"afterburnerLevelSpeed":377},"radar":{"horizontalScan":60,"verticalScan":20,"scanRateHz":0.5,"lockRange":25947,"trackMemorySeconds":2.5,"maxContacts":2,"acquireMargin":0.94,"velocityGate":25,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":5375,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.125],[0.2,0.537],[0.4,0.824],[0.6,1.093],[0.8,1.415],[1,1.792]],"afterburnerFlowMultiplier":3.89},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":120,"chaff":60,"flare":60},"flightControl":{"fullAuthoritySpeed":170,"rollTaperOnsetSpeed":240,"rollHighPressureTaper":0.4,"pitchAuthorityExponent":0.8,"rollAuthorityExponent":0.7,"yawAuthorityExponent":1.0,"angleOfAttackCaptureSeconds":0.42,"limitSoftness":0.32,"storesAsymmetryTrim":0.35},"inertia":{"rollInertia":22848,"pitchInertia":133481,"yawInertia":157344,"rollControlMoment":123257.0,"pitchControlMoment":232968.0,"yawControlMoment":44775,"rollDamping":498,"pitchDamping":1864,"yawDamping":1962,"stationSpanMetres":[-2.6,2.6,-1,1],"storesArmMetres":0.6,"fuelRollArmMetres":1.17,"fuelPitchArmMetres":1.75},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"mig29":{"id":"mig29","mass":13350,"wingArea":38,"engine":{"thrustAltitudeCurve":[[0,98800.0],[1000,90889.0],[2000,83448.0],[3000,76462.0],[4000,69914.0],[5000,63779.0],[6000,58053.0],[7000,52710.0],[8000,47738.0],[9000,43117.0],[10000,38827.0],[11000,34786.0],[12000,30466.0],[14000,23261.0],[16000,17757.0],[18000,13552.0],[20000,10352.0],[24000,5973.0]],"afterburnerThrustMultiplier":1.648,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.98],[0.9,1.04],[1.0,1.1],[1.2,1.28],[1.4,1.48],[1.6,1.68],[1.8,1.86],[2.0,2.02],[2.2,2.14],[2.5,2.26],[3.0,2.35]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.6162],[-55.0,-0.9251],[-48.2,-1.1918],[-41.9,-1.3354],[-36.8,-1.4586],[-33.0,-1.56],[-29.2,-1.4742],[-25.4,-1.3416],[-20.3,-1.1123],[-15.2,-0.8658],[-10.2,-0.6084],[-7.7,-0.468],[-5.1,-0.3276],[-3.3,-0.2324],[-1.7,-0.1451],[0.0,0.074],[1.7,0.186],[3.3,0.298],[5.1,0.42],[7.7,0.6],[10.2,0.78],[15.2,1.11],[20.3,1.426],[25.4,1.72],[29.2,1.89],[33.0,2.0],[36.8,1.87],[41.9,1.712],[48.2,1.528],[55.0,1.186],[70.0,0.79],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,1.83402],[-90.0,1.83402],[-70.0,1.33463],[-55.0,1.04497],[-48.2,0.94294],[-41.9,0.86861],[-36.8,0.82647],[-33.0,0.50107],[-29.2,0.44955],[-25.4,0.37565],[-20.3,0.26428],[-15.2,0.16777],[-10.2,0.09268],[-7.7,0.06277],[-5.1,0.04066],[-3.3,0.03011],[-1.7,0.02359],[0.0,0.0205],[1.7,0.02626],[3.3,0.03699],[5.1,0.05433],[7.7,0.09067],[10.2,0.13983],[15.2,0.26327],[20.3,0.42188],[25.4,0.60494],[29.2,0.7264],[33.0,0.81109],[36.8,0.82647],[41.9,0.86861],[48.2,0.94294],[55.0,1.04497],[70.0,1.33463],[90.0,1.83402]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00359],[0.82,0.0106],[0.888,0.02173],[0.945,0.03137],[1.013,0.03759],[1.1,0.0378],[1.2,0.0368],[1.3,0.03328],[1.4,0.02993],[1.6,0.02412],[1.8,0.02273],[2.0,0.02155],[2.2,0.02053],[2.5,0.01925],[3.0,0.01756]],"liftAltitudeMultiplierCurve":[[0,1.0],[7976.0,1.0],[8176.0,0.972],[8376.0,0.896],[8576.0,0.784],[8776.0,0.648],[8976.0,0.5],[9176.0,0.352],[9376.0,0.216],[9576.0,0.104],[9776.0,0.028],[9976.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":26,"limiterSoftStartAngleOfAttack":20,"structuralSpeedLimitCurve":[[0,400.0],[1000,400.0],[2000,423.0],[3000,499.0],[4000,551.0],[5000,570.0],[6000,589.0],[7000,606.0],[8000,626.0],[9000,638.0],[10000,655.9],[11000,664.2],[13000,664.2],[15000,664.2],[18000,664.2],[21000,665.6]]},"response":{"maxPitchRate":108,"maxRollRate":250,"maxYawRate":15,"pitchRateResponse":0.65,"rollRateResponse":0.7,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.08,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.85,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":311,"afterburnerLevelSpeed":382},"radar":{"horizontalScan":140,"verticalScan":50,"scanRateHz":1,"lockRange":25947,"trackMemorySeconds":1.25,"maxContacts":5,"acquireMargin":0.94,"velocityGate":20,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":4375,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.102],[0.2,0.437],[0.4,0.671],[0.6,0.89],[0.8,1.152],[1,1.458]],"afterburnerFlowMultiplier":4.22},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":60,"chaff":30,"flare":30},"flightControl":{"fullAuthoritySpeed":125,"rollTaperOnsetSpeed":260,"rollHighPressureTaper":0.3,"pitchAuthorityExponent":0.55,"rollAuthorityExponent":0.48,"yawAuthorityExponent":0.85,"angleOfAttackCaptureSeconds":0.22,"limitSoftness":0.22,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":18661,"pitchInertia":122181,"yawInertia":147024,"rollControlMoment":290800.0,"pitchControlMoment":575764.0,"yawControlMoment":53459,"rollDamping":343,"pitchDamping":1153,"yawDamping":1901,"stationSpanMetres":[-4.1,4.1,-2.6,2.6],"storesArmMetres":0.55,"fuelRollArmMetres":1.7,"fuelPitchArmMetres":1.76},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"rafale":{"id":"rafale","mass":13350,"wingArea":45.7,"engine":{"thrustAltitudeCurve":[[0,100000.0],[1000,92530.0],[2000,85463.0],[3000,78787.0],[4000,72492.0],[5000,66555.0],[6000,60979.0],[7000,55741.0],[8000,50833.0],[9000,46240.0],[10000,41944.0],[11000,37868.0],[12000,33474.0],[14000,26043.0],[16000,20259.0],[18000,15756.0],[20000,12263.0],[24000,7352.0]],"afterburnerThrustMultiplier":1.5,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.05],[1.0,1.1],[1.2,1.27],[1.4,1.43],[1.6,1.56],[1.8,1.65],[2.0,1.71],[2.2,1.75],[2.5,1.79],[3.0,1.83]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.6933],[-55.0,-1.0407],[-51.1,-1.3408],[-44.5,-1.5023],[-39.0,-1.641],[-35.0,-1.755],[-31.0,-1.6584],[-26.9,-1.5093],[-21.5,-1.2513],[-16.1,-0.9741],[-10.8,-0.6845],[-8.1,-0.5265],[-5.4,-0.3685],[-3.5,-0.2615],[-1.8,-0.1632],[0.0,0.0832],[1.8,0.2092],[3.5,0.3352],[5.4,0.4725],[8.1,0.675],[10.8,0.8775],[16.1,1.2488],[21.5,1.6042],[26.9,1.935],[31.0,2.1262],[35.0,2.25],[39.0,2.1038],[44.5,1.926],[51.1,1.719],[55.0,1.3342],[70.0,0.8888],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.02375],[-90.0,2.02375],[-70.0,1.43767],[-55.0,1.10275],[-51.1,1.0335],[-44.5,0.9367],[-39.0,0.88022],[-35.0,0.53014],[-31.0,0.47524],[-26.9,0.39661],[-21.5,0.27803],[-16.1,0.17533],[-10.8,0.09535],[-8.1,0.0635],[-5.4,0.03996],[-3.5,0.02873],[-1.8,0.02179],[0.0,0.0185],[1.8,0.02464],[3.5,0.03606],[5.4,0.05452],[8.1,0.09321],[10.8,0.14554],[16.1,0.27699],[21.5,0.4458],[26.9,0.64072],[31.0,0.77],[35.0,0.8602],[39.0,0.88022],[44.5,0.9367],[51.1,1.0335],[55.0,1.10275],[70.0,1.43767],[90.0,2.02375]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00242],[0.82,0.00684],[0.888,0.01286],[0.945,0.02142],[1.013,0.02852],[1.1,0.02888],[1.2,0.02523],[1.3,0.02348],[1.4,0.02178],[1.6,0.01859],[1.8,0.01816],[2.0,0.01778],[2.2,0.01745],[2.5,0.01701],[3.0,0.0164]],"liftAltitudeMultiplierCurve":[[0,1.0],[7382.0,1.0],[7582.0,0.972],[7782.0,0.896],[7982.0,0.784],[8182.0,0.648],[8382.0,0.5],[8582.0,0.352],[8782.0,0.216],[8982.0,0.104],[9182.0,0.028],[9382.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":29,"limiterSoftStartAngleOfAttack":23,"structuralSpeedLimitCurve":[[0,380.0],[1000,380.0],[2000,420.0],[3000,441.0],[4000,466.0],[5000,488.0],[6000,515.0],[7000,528.0],[8000,552.5],[9000,552.5],[10000,552.5],[11000,539.3],[13000,531.4],[15000,531.4],[18000,531.4],[21000,532.4]]},"response":{"maxPitchRate":108,"maxRollRate":280,"maxYawRate":15,"pitchRateResponse":0.72,"rollRateResponse":0.8,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.08,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.8,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":317,"afterburnerLevelSpeed":362},"radar":{"horizontalScan":140,"verticalScan":140,"scanRateHz":15,"lockRange":20295,"trackMemorySeconds":0.5,"maxContacts":14,"acquireMargin":0.94,"velocityGate":10,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":5875,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.137],[0.2,0.587],[0.4,0.901],[0.6,1.195],[0.8,1.547],[1,1.958]],"afterburnerFlowMultiplier":3.84},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":144,"chaff":112,"flare":32},"flightControl":{"fullAuthoritySpeed":125,"rollTaperOnsetSpeed":260,"rollHighPressureTaper":0.25,"pitchAuthorityExponent":0.5,"rollAuthorityExponent":0.45,"yawAuthorityExponent":0.8,"angleOfAttackCaptureSeconds":0.2,"limitSoftness":0.18,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":20788,"pitchInertia":137755,"yawInertia":169599,"rollControlMoment":423289.0,"pitchControlMoment":721283.0,"yawControlMoment":55501,"rollDamping":363,"pitchDamping":1002,"yawDamping":1741,"stationSpanMetres":[-4.2,4.2,-2.8,2.8,-1.2,1.2],"storesArmMetres":0.55,"fuelRollArmMetres":1.64,"fuelPitchArmMetres":1.93},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}},"su27":{"id":"su27","mass":21980,"wingArea":62,"engine":{"thrustAltitudeCurve":[[0,149000.0],[1000,138406.0],[2000,128344.0],[3000,118801.0],[4000,109764.0],[5000,101207.0],[6000,93134.0],[7000,85517.0],[8000,78348.0],[9000,71607.0],[10000,65272.0],[11000,59231.0],[12000,52681.0],[14000,41504.0],[16000,32695.0],[18000,25749.0],[20000,20294.0],[24000,12482.0]],"afterburnerThrustMultiplier":1.646,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.98],[0.9,1.04],[1.0,1.1],[1.2,1.28],[1.4,1.48],[1.6,1.68],[1.8,1.86],[2.0,2.02],[2.2,2.14],[2.5,2.26],[3.0,2.35]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.647],[-55.0,-0.9713],[-49.6,-1.2514],[-43.2,-1.4021],[-37.9,-1.5315],[-34.0,-1.638],[-30.1,-1.5479],[-26.2,-1.4087],[-20.9,-1.1679],[-15.7,-0.9091],[-10.5,-0.6388],[-7.9,-0.4914],[-5.3,-0.344],[-3.4,-0.2441],[-1.7,-0.1523],[0.0,0.0777],[1.7,0.1953],[3.4,0.3129],[5.3,0.441],[7.9,0.63],[10.5,0.819],[15.7,1.1655],[20.9,1.4973],[26.2,1.806],[30.1,1.9845],[34.0,2.1],[37.9,1.9635],[43.2,1.7976],[49.6,1.6044],[55.0,1.2453],[70.0,0.8295],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,1.83394],[-90.0,1.83394],[-70.0,1.30532],[-55.0,1.00091],[-49.6,0.91485],[-43.2,0.83266],[-37.9,0.78496],[-34.0,0.47437],[-30.1,0.42559],[-26.2,0.35567],[-20.9,0.25024],[-15.7,0.15891],[-10.5,0.08781],[-7.9,0.05951],[-5.3,0.03858],[-3.4,0.0286],[-1.7,0.02242],[0.0,0.0195],[1.7,0.02496],[3.4,0.03511],[5.3,0.05152],[7.9,0.08592],[10.5,0.13245],[15.7,0.24929],[20.9,0.39941],[26.2,0.57268],[30.1,0.68764],[34.0,0.7678],[37.9,0.78496],[43.2,0.83266],[49.6,0.91485],[55.0,1.00091],[70.0,1.30532],[90.0,1.83394]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00298],[0.82,0.00872],[0.888,0.01755],[0.945,0.02614],[1.013,0.03375],[1.1,0.03594],[1.2,0.03565],[1.3,0.03244],[1.4,0.02936],[1.6,0.02451],[1.8,0.02219],[2.0,0.02031],[2.2,0.01876],[2.5,0.01685],[3.0,0.01445]],"liftAltitudeMultiplierCurve":[[0,1.0],[8320.0,1.0],[8520.0,0.972],[8720.0,0.896],[8920.0,0.784],[9120.0,0.648],[9320.0,0.5],[9520.0,0.352],[9720.0,0.216],[9920.0,0.104],[10120.0,0.028],[10320.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":30,"limiterSoftStartAngleOfAttack":23,"structuralSpeedLimitCurve":[[0,390.0],[1000,390.0],[2000,409.9],[3000,456.0],[4000,537.0],[5000,570.0],[6000,604.0],[7000,638.0],[8000,664.0],[9000,691.0],[10000,691.0],[11000,693.7],[13000,693.7],[15000,693.7],[18000,693.7],[21000,695.1]]},"response":{"maxPitchRate":105,"maxRollRate":200,"maxYawRate":15,"pitchRateResponse":0.5,"rollRateResponse":0.6,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.08,"postStallControlAuthority":1.0},"stability":{"pitchStability":0.4,"yawStability":0.85,"maxPitchStabilityRate":40,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":314,"afterburnerLevelSpeed":372},"radar":{"horizontalScan":160,"verticalScan":140,"scanRateHz":5,"lockRange":25947,"trackMemorySeconds":0.5,"maxContacts":8,"acquireMargin":0.94,"velocityGate":18,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":11750,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.274],[0.2,1.175],[0.4,1.802],[0.6,2.389],[0.8,3.094],[1,3.917]],"afterburnerFlowMultiplier":4.21},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":192,"chaff":96,"flare":96},"flightControl":{"fullAuthoritySpeed":155,"rollTaperOnsetSpeed":270,"rollHighPressureTaper":0.25,"pitchAuthorityExponent":0.7,"rollAuthorityExponent":0.5,"yawAuthorityExponent":0.85,"angleOfAttackCaptureSeconds":0.3,"limitSoftness":0.24,"storesAsymmetryTrim":0.7},"inertia":{"rollInertia":66485,"pitchInertia":358984,"yawInertia":435252,"rollControlMoment":580191.0,"pitchControlMoment":1430156,"yawControlMoment":142436,"rollDamping":1365,"pitchDamping":3213,"yawDamping":4901,"stationSpanMetres":[-5.6,5.6,-3.7,3.7,-1,1],"storesArmMetres":0.7,"fuelRollArmMetres":2.2,"fuelPitchArmMetres":2.25},"postStall":{"fadeBandDegrees":38,"pitchAuthority":0.65,"rollAuthority":0.15,"yawAuthority":0.1,"recoveryMoment":1200000,"recoveryPressureFloor":0.35,"rateCommandFade":1}},"su30":{"id":"su30","mass":24320,"wingArea":62,"engine":{"thrustAltitudeCurve":[[0,149000.0],[1000,138406.0],[2000,128344.0],[3000,118801.0],[4000,109764.0],[5000,101207.0],[6000,93134.0],[7000,85517.0],[8000,78348.0],[9000,71607.0],[10000,65272.0],[11000,59231.0],[12000,52681.0],[14000,41504.0],[16000,32695.0],[18000,25749.0],[20000,20294.0],[24000,12482.0]],"afterburnerThrustMultiplier":1.646,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.98],[0.9,1.04],[1.0,1.1],[1.2,1.28],[1.4,1.48],[1.6,1.68],[1.8,1.86],[2.0,2.02],[2.2,2.14],[2.5,2.26],[3.0,2.35]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.647],[-55.0,-0.9713],[-49.6,-1.2514],[-43.2,-1.4021],[-37.9,-1.5315],[-34.0,-1.638],[-30.1,-1.5479],[-26.2,-1.4087],[-20.9,-1.1679],[-15.7,-0.9091],[-10.5,-0.6388],[-7.9,-0.4914],[-5.3,-0.344],[-3.4,-0.2441],[-1.7,-0.1523],[0.0,0.0777],[1.7,0.1953],[3.4,0.3129],[5.3,0.441],[7.9,0.63],[10.5,0.819],[15.7,1.1655],[20.9,1.4973],[26.2,1.806],[30.1,1.9845],[34.0,2.1],[37.9,1.9635],[43.2,1.7976],[49.6,1.6044],[55.0,1.2453],[70.0,0.8295],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,1.96121],[-90.0,1.96121],[-70.0,1.38708],[-55.0,1.05646],[-49.6,0.96299],[-43.2,0.87373],[-37.9,0.8219],[-34.0,0.49691],[-30.1,0.44599],[-26.2,0.37298],[-20.9,0.26291],[-15.7,0.16755],[-10.5,0.09333],[-7.9,0.06377],[-5.3,0.04193],[-3.4,0.0315],[-1.7,0.02505],[0.0,0.022],[1.7,0.02769],[3.4,0.0383],[5.3,0.05543],[7.9,0.09134],[10.5,0.13993],[15.7,0.26192],[20.9,0.41865],[26.2,0.59956],[30.1,0.71959],[34.0,0.80327],[37.9,0.8219],[43.2,0.87373],[49.6,0.96299],[55.0,1.05646],[70.0,1.38708],[90.0,1.96121]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.00323],[0.82,0.00949],[0.888,0.0191],[0.945,0.02846],[1.013,0.03475],[1.1,0.03531],[1.2,0.03389],[1.3,0.03091],[1.4,0.02804],[1.6,0.02284],[1.8,0.02196],[2.0,0.02121],[2.2,0.02055],[2.5,0.01969],[3.0,0.01853]],"liftAltitudeMultiplierCurve":[[0,1.0],[7882.0,1.0],[8082.0,0.972],[8282.0,0.896],[8482.0,0.784],[8682.0,0.648],[8882.0,0.5],[9082.0,0.352],[9282.0,0.216],[9482.0,0.104],[9682.0,0.028],[9882.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":30,"limiterSoftStartAngleOfAttack":23,"structuralSpeedLimitCurve":[[0,380.0],[1000,380.0],[2000,399.3],[3000,429.0],[4000,498.0],[5000,546.0],[6000,568.0],[7000,591.0],[8000,613.0],[9000,616.0],[10000,623.1],[11000,623.1],[13000,619.9],[15000,619.9],[18000,619.9],[21000,621.2]]},"response":{"maxPitchRate":100,"maxRollRate":190,"maxYawRate":15,"pitchRateResponse":0.5,"rollRateResponse":0.55,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.07,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.85,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":307,"afterburnerLevelSpeed":362},"radar":{"horizontalScan":240,"verticalScan":120,"scanRateHz":20,"lockRange":25947,"trackMemorySeconds":0.5,"maxContacts":15,"acquireMargin":0.94,"velocityGate":13,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":12050,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.281],[0.2,1.205],[0.4,1.848],[0.6,2.45],[0.8,3.173],[1,4.017]],"afterburnerFlowMultiplier":4.21},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":192,"chaff":96,"flare":96},"flightControl":{"fullAuthoritySpeed":165,"rollTaperOnsetSpeed":270,"rollHighPressureTaper":0.28,"pitchAuthorityExponent":0.7,"rollAuthorityExponent":0.52,"yawAuthorityExponent":0.85,"angleOfAttackCaptureSeconds":0.3,"limitSoftness":0.24,"storesAsymmetryTrim":0.7},"inertia":{"rollInertia":78234,"pitchInertia":423681,"yawInertia":508343,"rollControlMoment":576519.0,"pitchControlMoment":1478927,"yawControlMoment":151232,"rollDamping":1665,"pitchDamping":3997,"yawDamping":5915,"stationSpanMetres":[-5.6,5.6,-3.7,3.7,-2,2,-1,1],"storesArmMetres":0.7,"fuelRollArmMetres":2.2,"fuelPitchArmMetres":2.25},"postStall":{"fadeBandDegrees":30,"pitchAuthority":0.65,"rollAuthority":0.15,"yawAuthority":0.1,"recoveryMoment":1200000,"recoveryPressureFloor":0.35,"rateCommandFade":1}},"typhoon":{"id":"typhoon","mass":14198,"wingArea":51.2,"engine":{"thrustAltitudeCurve":[[0,120000.0],[1000,111901.0],[2000,104179.0],[3000,96826.0],[4000,89834.0],[5000,83185.0],[6000,76885.0],[7000,70915.0],[8000,65270.0],[9000,59937.0],[10000,54902.0],[11000,50076.0],[12000,44814.0],[14000,35752.0],[16000,28519.0],[18000,22744.0],[20000,18152.0],[24000,11454.0]],"afterburnerThrustMultiplier":1.5,"thrustMachCurve":[[0.0,1.0],[0.3,0.97],[0.6,0.99],[0.9,1.05],[1.0,1.11],[1.2,1.29],[1.4,1.47],[1.6,1.62],[1.8,1.74],[2.0,1.81],[2.2,1.9],[2.5,2.02],[3.0,2.15]]},"aerodynamics":{"liftCoefficientCurve":[[-90.0,0.0],[-90.0,-0.0],[-70.0,-0.6778],[-55.0,-1.0176],[-49.6,-1.311],[-43.2,-1.4689],[-37.9,-1.6045],[-34.0,-1.716],[-30.1,-1.6216],[-26.2,-1.4758],[-20.9,-1.2235],[-15.7,-0.9524],[-10.5,-0.6692],[-7.9,-0.5148],[-5.3,-0.3604],[-3.4,-0.2557],[-1.7,-0.1596],[0.0,0.0814],[1.7,0.2046],[3.4,0.3278],[5.3,0.462],[7.9,0.66],[10.5,0.858],[15.7,1.221],[20.9,1.5686],[26.2,1.892],[30.1,2.079],[34.0,2.2],[37.9,2.057],[43.2,1.8832],[49.6,1.6808],[55.0,1.3046],[70.0,0.869],[90.0,0.0]],"dragCoefficientCurve":[[-90.0,2.12974],[-90.0,2.12974],[-70.0,1.53985],[-55.0,1.20017],[-49.6,1.10414],[-43.2,1.01243],[-37.9,0.95918],[-34.0,0.57848],[-30.1,0.51837],[-26.2,0.43222],[-20.9,0.30231],[-15.7,0.18978],[-10.5,0.10217],[-7.9,0.0673],[-5.3,0.04152],[-3.4,0.02921],[-1.7,0.0216],[0.0,0.018],[1.7,0.02473],[3.4,0.03724],[5.3,0.05746],[7.9,0.09984],[10.5,0.15717],[15.7,0.30114],[20.9,0.48612],[26.2,0.69962],[30.1,0.84128],[34.0,0.94005],[37.9,0.95918],[43.2,1.01243],[49.6,1.10414],[55.0,1.20017],[70.0,1.53985],[90.0,2.12974]],"waveDragMachCurve":[[0.0,0.0],[0.579,0.0],[0.724,0.0018],[0.82,0.00509],[0.888,0.00957],[0.945,0.01594],[1.013,0.02381],[1.1,0.0283],[1.2,0.02993],[1.3,0.02765],[1.4,0.02544],[1.6,0.02128],[1.8,0.02079],[2.0,0.02036],[2.2,0.01997],[2.5,0.01946],[3.0,0.01877]],"liftAltitudeMultiplierCurve":[[0,1.0],[8391.0,1.0],[8591.0,0.972],[8791.0,0.896],[8991.0,0.784],[9191.0,0.648],[9391.0,0.5],[9591.0,0.352],[9791.0,0.216],[9991.0,0.104],[10191.0,0.028],[10391.0,0.0],[28000,0.0]]},"limits":{"maxPositiveG":12,"maxNegativeG":-3,"limiterAngleOfAttack":28,"limiterSoftStartAngleOfAttack":22,"structuralSpeedLimitCurve":[[0,405.0],[1000,405.0],[2000,429.0],[3000,470.0],[4000,511.0],[5000,540.0],[6000,557.0],[7000,574.0],[8000,589.0],[9000,607.6],[10000,607.6],[11000,599.2],[13000,590.4],[15000,590.4],[18000,590.4],[21000,591.6]]},"response":{"maxPitchRate":100,"maxRollRate":200,"maxYawRate":15,"pitchRateResponse":0.65,"rollRateResponse":0.75,"yawRateResponse":0.35,"controlAuthorityReferenceSpeed":90,"minimumControlAuthority":0.07,"postStallControlAuthority":0.4},"stability":{"pitchStability":0.4,"yawStability":0.8,"maxPitchStabilityRate":25,"maxYawStabilityRate":18},"ground":{"rollingResistance":0.02,"lateralGrip":6,"thrustFactor":0.85},"publishedSpeeds":{"militaryLevelSpeed":333,"afterburnerLevelSpeed":390},"radar":{"horizontalScan":200,"verticalScan":180,"scanRateHz":40,"lockRange":41823,"trackMemorySeconds":3,"maxContacts":12,"acquireMargin":0.94,"velocityGate":10,"velocityGateLookDownOnly":false},"fuel":{"capacityLitres":6245,"referenceFuelFraction":0.5,"throttleThrustCurve":[[0,0.06],[0.2,0.17],[0.4,0.34],[0.6,0.54],[0.8,0.77],[1,1]],"throttleFlowCurve":[[0,0.146],[0.2,0.624],[0.4,0.958],[0.6,1.27],[0.8,1.645],[1,2.082]],"afterburnerFlowMultiplier":3.84},"flaps":{"liftIncrement":0.35,"dragIncrement":0.045,"placardSpeed":130,"travelTicks":22},"countermeasures":{"capacity":352,"chaff":320,"flare":32},"flightControl":{"fullAuthoritySpeed":145,"rollTaperOnsetSpeed":270,"rollHighPressureTaper":0.2,"pitchAuthorityExponent":0.7,"rollAuthorityExponent":0.55,"yawAuthorityExponent":0.88,"angleOfAttackCaptureSeconds":0.22,"limitSoftness":0.2,"storesAsymmetryTrim":0.75},"inertia":{"rollInertia":24769,"pitchInertia":160489,"yawInertia":199930,"rollControlMoment":360251.0,"pitchControlMoment":700265.0,"yawControlMoment":65427,"rollDamping":432,"pitchDamping":1120,"yawDamping":2053,"stationSpanMetres":[-4.2,4.2,-2.9,2.9,-1.4,1.4],"storesArmMetres":0.55,"fuelRollArmMetres":1.64,"fuelPitchArmMetres":2.05},"postStall":{"fadeBandDegrees":10,"pitchAuthority":0,"rollAuthority":0,"yawAuthority":0,"recoveryMoment":0,"recoveryPressureFloor":0.15,"rateCommandFade":0}}},"missile":{"aim120":{"id":"AIM120","mass":152,"referenceArea":0.0249,"length":3.66,"motor":{"thrustCurve":[[0,36147.57459],[3.65,36147.57459],[3.75,1083.7484],[10.15,1083.7484],[10.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.97028],[0.6,1.00494],[0.8,1.10886],[0.9,1.38612],[0.95,1.94055],[1.05,2.35638],[1.2,2.21778],[1.5,1.69797],[2,1.38612],[2.5,1.22672],[3,1.14353],[3.5,1.10198],[4,1.08115],[5,1.06731]],"normalForceCoefficientCurve":[[0,0],[2,2.125],[5,5.375],[10,11.25],[15,17.5],[20,24],[25,30],[30,33.75],[40,36.25]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":30,"maxAoA":25,"maxGRate":150},"launch":{"maxRange":23703,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":29,"navigationConstant":3.6,"maxLeadTicks":72,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":12000,"velocityGate":15,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.4,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":false,"datalinkUpdateSeconds":1.0,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.8,"confirmSeconds":0.3,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":2.0,"burnThroughRange":3000},"loft":{"angleDegrees":5,"fullRange":3560,"minRange":1190,"ceiling":16000},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.02},"lifetimeTicks":836,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"aim120l":{"id":"AIM120L","mass":161,"referenceArea":0.0249,"length":3.66,"motor":{"thrustCurve":[[0,26154.90797],[5.65,26154.90797],[5.85,4500],[15.65,4500],[15.85,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.593],[0.6,0.61709],[0.8,0.67974],[0.9,0.84847],[0.95,1.18598],[1.05,1.44148],[1.2,1.35954],[1.5,1.04134],[2,0.84847],[2.5,0.75208],[3,0.69904],[3.5,0.67495],[4,0.66049],[5,0.65082]],"normalForceCoefficientCurve":[[0,0],[2,2.25],[5,5.75],[10,12.125],[15,18.875],[20,26],[25,32.5],[30,36.5],[40,39.25]],"controlAuthorityCurve":[[0.0,0.34],[0.5,0.54],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.98],[3.5,0.94],[4.5,0.88]]},"limits":{"maxG":36,"maxAoA":26,"maxGRate":150},"launch":{"maxRange":32856,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":30,"navigationConstant":3.4,"maxLeadTicks":84,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":15000,"velocityGate":13,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.25,"extrapolateOnLoss":true,"extrapolateAfterDecoy":false,"twoWayDatalink":true,"datalinkUpdateSeconds":0.5,"datalinkErrorDegrees":0.3,"scanRateDegreesPerSecond":250,"reacquireSeconds":1,"confirmSeconds":0.25,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":0.8,"burnThroughRange":3000},"loft":{"angleDegrees":5,"fullRange":8000,"minRange":2670,"ceiling":20000},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.02},"lifetimeTicks":1148,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"aim7":{"id":"AIM7","mass":231,"referenceArea":0.0324,"length":3.66,"motor":{"thrustCurve":[[0,54105.84843],[3.65,54105.84843],[3.85,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.06505],[0.6,1.10763],[0.8,1.2476],[0.9,1.61277],[0.95,2.19094],[1.05,2.61695],[1.2,2.46479],[1.5,1.88663],[2,1.53367],[2.5,1.35105],[3,1.25981],[3.5,1.21718],[4,1.19287],[5,1.17459]],"normalForceCoefficientCurve":[[0,0],[2,2.125],[5,5.375],[10,11.25],[15,17.5],[20,24],[25,30],[30,33.75],[40,36.25]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":30,"maxAoA":25,"maxGRate":100},"launch":{"maxRange":23535,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":35,"navigationConstant":4,"maxLeadTicks":60,"activeHoming":false,"type":"SARH","velocityGate":20,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.6,"extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"scanRateDegreesPerSecond":125,"reacquireSeconds":1,"confirmSeconds":0.4,"burnThroughRange":3000},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":12,"armingDistance":24},"carriage":{"dragArea":0.026},"lifetimeTicks":809,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"aim9":{"id":"AIM9","mass":85,"referenceArea":0.0127,"length":2.85,"motor":{"thrustCurve":[[0,27303.28086],[1.8,27303.28086],[1.95,0],[199.7,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.49751],[0.6,0.51281],[0.8,0.56449],[0.9,0.68886],[0.95,0.89935],[1.05,1.07156],[1.2,0.99502],[1.5,0.78454],[2,0.6506],[2.5,0.59319],[3,0.56639],[3.5,0.5511],[4,0.54344]],"normalForceCoefficientCurve":[[0,0],[2,2.875],[5,7.25],[10,15.25],[15,23.5],[20,31.5],[25,38.5],[30,44.25],[40,51.25],[50,53.25]],"controlAuthorityCurve":[[0.0,0.55],[0.5,0.75],[0.8,0.92],[1.0,1.0],[1.2,1.0],[2.0,0.98],[2.8,0.9],[3.5,0.8]]},"limits":{"maxG":50,"maxAoA":35,"maxGRate":250},"launch":{"maxRange":3000,"minRange":24,"cooldownTicks":30,"warmupSeconds":1.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":140,"navigationConstant":4.2,"maxLeadTicks":40,"activeHoming":true,"type":"IR","extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"reacquireSeconds":0.25,"confirmSeconds":0.1,"burnThroughRange":3000,"flareSusceptibility":0.18,"heatSourceCoefficient":0.7},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":8,"armingDistance":24},"carriage":{"dragArea":0.01},"lifetimeTicks":220,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"meteor":{"id":"METEOR","mass":190,"referenceArea":0.0249,"length":3.65,"motor":{"thrustCurve":[[0,45244.43736],[5.25,45244.43736],[5.45,5500],[38.65,5500],[38.85,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.22163],[0.6,1.26304],[0.8,1.38734],[0.9,1.73931],[0.95,2.42259],[1.05,2.94025],[1.2,2.77459],[1.5,2.12235],[2,1.72893],[2.5,1.53226],[3,1.42872],[3.5,1.3666],[4,1.34587],[5,1.32517],[6,1.31469]],"normalForceCoefficientCurve":[[0,0],[2,2.5],[5,6.45],[10,13.5],[15,21],[20,28.875],[25,36],[30,40.5],[40,43.625]],"controlAuthorityCurve":[[0.0,0.42],[0.5,0.64],[0.8,0.88],[1.0,0.99],[1.2,1.0],[2.0,1.0],[2.8,0.99],[3.5,0.96],[4.5,0.92],[5.5,0.88]]},"limits":{"maxG":40,"maxAoA":27,"maxGRate":150},"launch":{"maxRange":41823,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":32,"navigationConstant":3.3,"maxLeadTicks":92,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":18000,"velocityGate":10,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.2,"extrapolateOnLoss":true,"extrapolateAfterDecoy":false,"twoWayDatalink":true,"datalinkUpdateSeconds":0.5,"datalinkErrorDegrees":0.3,"scanRateDegreesPerSecond":1200,"reacquireSeconds":0.5,"confirmSeconds":0.2,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":0.8,"burnThroughRange":1500},"loft":{"angleDegrees":4,"fullRange":16730,"minRange":5580,"ceiling":22000},"warhead":{"explosionPower":3,"proximityFuseRadius":11,"armingDistance":24},"carriage":{"dragArea":0.026},"lifetimeTicks":1300,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"mica":{"id":"MICA","mass":112,"referenceArea":0.0201,"length":3.1,"motor":{"thrustCurve":[[0,37245.6804],[4.15,37245.6804],[4.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.71962],[0.6,0.7478],[0.8,0.83367],[0.9,1.06186],[0.95,1.51819],[1.05,1.86046],[1.2,1.74637],[1.5,1.31823],[2,1.06186],[2.5,0.93062],[3,0.8625],[3.5,0.82816],[4,0.81098],[5,0.79932]],"normalForceCoefficientCurve":[[0,0],[2,2.8475],[5,7.2025],[10,15.075],[15,23.45],[20,32.16],[25,40.2],[30,45.225],[40,48.575]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":50,"maxAoA":35,"maxGRate":200},"launch":{"maxRange":20295,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":33,"navigationConstant":3.7,"maxLeadTicks":78,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":10000,"velocityGate":13,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.3,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":false,"datalinkUpdateSeconds":1.0,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.7,"confirmSeconds":0.3,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":1.5,"burnThroughRange":3000},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":8,"armingDistance":24},"carriage":{"dragArea":0.014},"lifetimeTicks":750,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"pl10":{"id":"PL10","mass":105,"referenceArea":0.0227,"length":3.0,"motor":{"thrustCurve":[[0,33240.08886],[1.9,33240.08886],[2.05,0],[199.7,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.56281],[0.6,0.58015],[0.8,0.6386],[0.9,0.7793],[0.95,1.01744],[1.05,1.21226],[1.2,1.12567],[1.5,0.88755],[2,0.73601],[2.5,0.67108],[3,0.64076],[3.5,0.62344],[4,0.61479]],"normalForceCoefficientCurve":[[0,0],[2,3.25],[5,8.25],[10,17.25],[15,26.5],[20,35.5],[25,43.5],[30,50],[40,58],[50,60.25]],"controlAuthorityCurve":[[0.0,0.55],[0.5,0.75],[0.8,0.92],[1.0,1.0],[1.2,1.0],[2.0,0.98],[2.8,0.9],[3.5,0.8]]},"limits":{"maxG":70,"maxAoA":40,"maxGRate":300},"launch":{"maxRange":3000,"minRange":24,"cooldownTicks":30,"warmupSeconds":1.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":120,"navigationConstant":4.8,"maxLeadTicks":34,"activeHoming":true,"type":"IR","extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"reacquireSeconds":0.15,"confirmSeconds":0.06,"burnThroughRange":3000,"flareSusceptibility":0.05,"heatSourceCoefficient":0.85},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":8,"armingDistance":24},"carriage":{"dragArea":0.018},"lifetimeTicks":220,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"pl12":{"id":"PL12","mass":180,"referenceArea":0.0324,"length":3.85,"motor":{"thrustCurve":[[0,39738.3983],[4.15,39738.3983],[4.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.03494],[0.6,1.07426],[0.8,1.20524],[0.9,1.54586],[0.95,2.083],[1.05,2.50222],[1.2,2.35811],[1.5,1.81442],[2,1.48038],[2.5,1.31005],[3,1.21836],[3.5,1.17907],[4,1.15286],[5,1.13975]],"normalForceCoefficientCurve":[[0,0],[2,2.125],[5,5.375],[10,11.25],[15,17.5],[20,24],[25,30],[30,33.75],[40,36.25]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":30,"maxAoA":25,"maxGRate":150},"launch":{"maxRange":20340,"minRange":24,"cooldownTicks":30,"warmupSeconds":3.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":28,"navigationConstant":3.6,"maxLeadTicks":72,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":12000,"velocityGate":15,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.45,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":false,"datalinkUpdateSeconds":1.0,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.8,"confirmSeconds":0.3,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":2.5,"burnThroughRange":3000},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.026},"lifetimeTicks":685,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"pl12a":{"id":"PL12A","mass":195,"referenceArea":0.0263,"length":3.85,"motor":{"thrustCurve":[[0,42280.72694],[4.65,42280.72694],[4.85,5000],[22.15,5000],[22.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.3273],[0.6,1.37609],[0.8,1.51271],[0.9,1.89337],[0.95,2.65461],[1.05,3.22068],[1.2,3.0352],[1.5,2.32282],[2,1.89337],[2.5,1.67864],[3,1.56156],[3.5,1.50296],[4,1.47372],[5,1.45418]],"normalForceCoefficientCurve":[[0,0],[2,2.45],[5,6.25],[10,13.05],[15,20.375],[20,28],[25,35],[30,39.375],[40,42.25]],"controlAuthorityCurve":[[0.0,0.42],[0.5,0.63],[0.8,0.86],[1.0,0.98],[1.2,1.0],[2.0,1.0],[2.8,0.97],[3.5,0.92],[4.5,0.86]]},"limits":{"maxG":38,"maxAoA":28,"maxGRate":150},"launch":{"maxRange":23769,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":29,"navigationConstant":3.4,"maxLeadTicks":84,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":15000,"velocityGate":13,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.3,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":true,"datalinkUpdateSeconds":0.5,"datalinkErrorDegrees":0.35,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.6,"confirmSeconds":0.25,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":1.5,"burnThroughRange":3000},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.026},"lifetimeTicks":979,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"pl15":{"id":"PL15","mass":210,"referenceArea":0.0314,"length":3.99,"motor":{"thrustCurve":[[0,34560.90535],[8.65,34560.90535],[8.85,0],[15.65,0],[15.7,17420],[30.65,17420],[30.85,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.14789],[0.6,1.1868],[0.8,1.30361],[0.9,1.63432],[0.95,2.27634],[1.05,2.76277],[1.2,2.60711],[1.5,1.99425],[2,1.62459],[2.5,1.43976],[3,1.3425],[3.5,1.28413],[4,1.26465],[5,1.24518]],"normalForceCoefficientCurve":[[0,0],[2,2.625],[5,6.75],[10,14.125],[15,22],[20,30.25],[25,37.75],[30,42.5],[40,45.75]],"controlAuthorityCurve":[[0.0,0.4],[0.5,0.62],[0.8,0.86],[1.0,0.98],[1.2,1.0],[2.0,1.0],[2.8,0.98],[3.5,0.94],[4.5,0.88]]},"limits":{"maxG":42,"maxAoA":28,"maxGRate":150},"launch":{"maxRange":44844,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":32,"navigationConstant":3.2,"maxLeadTicks":96,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":20000,"velocityGate":8,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.15,"extrapolateOnLoss":true,"extrapolateAfterDecoy":false,"twoWayDatalink":true,"datalinkUpdateSeconds":0.5,"datalinkErrorDegrees":0.3,"scanRateDegreesPerSecond":1200,"reacquireSeconds":0.5,"confirmSeconds":0.2,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":1.0,"burnThroughRange":1500},"loft":{"angleDegrees":3,"fullRange":29900,"minRange":9970,"ceiling":24000},"warhead":{"explosionPower":3,"proximityFuseRadius":11,"armingDistance":24},"carriage":{"dragArea":0.028},"lifetimeTicks":1110,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"pl8":{"id":"PL8","mass":115,"referenceArea":0.0201,"length":2.95,"motor":{"thrustCurve":[[0,39098.78695],[1.7,39098.78695],[1.85,0],[199.7,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.45649],[0.6,0.47052],[0.8,0.51796],[0.9,0.63207],[0.95,0.8252],[1.05,0.98324],[1.2,0.913],[1.5,0.71988],[2,0.59696],[2.5,0.54429],[3,0.5197],[3.5,0.50566],[4,0.49864]],"normalForceCoefficientCurve":[[0,0],[2,2.875],[5,7.25],[10,15.25],[15,23.5],[20,31.5],[25,38.5],[30,44.25],[40,51.25],[50,53.25]],"controlAuthorityCurve":[[0.0,0.55],[0.5,0.75],[0.8,0.92],[1.0,1.0],[1.2,1.0],[2.0,0.98],[2.8,0.9],[3.5,0.8]]},"limits":{"maxG":50,"maxAoA":35,"maxGRate":250},"launch":{"maxRange":3000,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":60,"navigationConstant":4.2,"maxLeadTicks":40,"activeHoming":true,"type":"IR","extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"reacquireSeconds":0.3,"confirmSeconds":0.12,"burnThroughRange":3000,"flareSusceptibility":0.25,"heatSourceCoefficient":0.6},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":8,"armingDistance":24},"carriage":{"dragArea":0.015},"lifetimeTicks":220,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"r27":{"id":"R27","mass":253,"referenceArea":0.0416,"length":4.08,"motor":{"thrustCurve":[[0,58698.57132],[5.15,58698.57132],[5.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.21747],[0.6,1.26621],[0.8,1.4244],[0.9,1.8262],[0.95,2.46539],[1.05,2.95238],[1.2,2.76977],[1.5,2.1306],[2,1.72883],[2.5,1.52182],[3,1.41836],[3.5,1.36965],[4,1.34534],[5,1.32704]],"normalForceCoefficientCurve":[[0,0],[2,2.125],[5,5.375],[10,11.25],[15,17.5],[20,24],[25,30],[30,33.75],[40,36.25]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":30,"maxAoA":25,"maxGRate":100},"launch":{"maxRange":25947,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":22.5,"navigationConstant":3.1,"maxLeadTicks":64,"activeHoming":false,"type":"SARH","velocityGate":20,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.55,"extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"scanRateDegreesPerSecond":125,"reacquireSeconds":1,"confirmSeconds":0.4,"burnThroughRange":3000},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":12,"armingDistance":24},"carriage":{"dragArea":0.033},"lifetimeTicks":772,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"r73":{"id":"R73","mass":105,"referenceArea":0.0227,"length":2.9,"motor":{"thrustCurve":[[0,35827.59476],[1.7,35827.59476],[1.85,0],[199.7,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,0.40331],[0.6,0.41572],[0.8,0.45762],[0.9,0.55844],[0.95,0.72909],[1.05,0.86871],[1.2,0.80664],[1.5,0.636],[2,0.52742],[2.5,0.48088],[3,0.45918],[3.5,0.44676],[4,0.44055]],"normalForceCoefficientCurve":[[0,0],[2,3.125],[5,7.875],[10,16.5],[15,25.25],[20,34],[25,41.5],[30,47.75],[40,55.25],[50,57.5]],"controlAuthorityCurve":[[0.0,0.55],[0.5,0.75],[0.8,0.92],[1.0,1.0],[1.2,1.0],[2.0,0.98],[2.8,0.9],[3.5,0.8]]},"limits":{"maxG":60,"maxAoA":38,"maxGRate":300},"launch":{"maxRange":3000,"minRange":24,"cooldownTicks":30,"warmupSeconds":1.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":90,"navigationConstant":4.6,"maxLeadTicks":36,"activeHoming":true,"type":"IR","extrapolateOnLoss":false,"twoWayDatalink":false,"datalinkUpdateSeconds":0,"reacquireSeconds":0.25,"confirmSeconds":0.1,"burnThroughRange":3000,"flareSusceptibility":0.15,"heatSourceCoefficient":0.75},"loft":{"angleDegrees":0},"warhead":{"explosionPower":3,"proximityFuseRadius":7,"armingDistance":24},"carriage":{"dragArea":0.018},"lifetimeTicks":220,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"r77":{"id":"R77","mass":175,"referenceArea":0.0314,"length":3.6,"motor":{"thrustCurve":[[0,70680.79546],[2.65,70680.79546],[2.85,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.239],[0.6,1.29087],[0.8,1.46949],[0.9,1.90171],[0.95,2.53559],[1.05,3.11187],[1.2,2.99662],[1.5,2.42034],[2,2.01696],[2.5,1.81527],[3,1.7],[3.5,1.65968],[4,1.63661],[5,1.61933]],"normalForceCoefficientCurve":[[0,0],[2,2.125],[5,5.375],[10,11.25],[15,17.5],[20,24],[25,30],[30,33.75],[40,36.25]],"controlAuthorityCurve":[[0.0,0.35],[0.5,0.55],[0.8,0.8],[1.0,0.95],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":35,"maxAoA":25,"maxGRate":150},"launch":{"maxRange":17904,"minRange":24,"cooldownTicks":30,"warmupSeconds":3.0,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":31,"navigationConstant":3.9,"maxLeadTicks":68,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":12000,"velocityGate":15,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.45,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":false,"datalinkUpdateSeconds":1.5,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.8,"confirmSeconds":0.3,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":3.5,"burnThroughRange":3000},"loft":{"angleDegrees":3,"fullRange":2690,"minRange":900,"ceiling":16000},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.03},"lifetimeTicks":401,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}},"r771":{"id":"R771","mass":190,"referenceArea":0.0271,"length":3.71,"motor":{"thrustCurve":[[0,89824.90084],[4.15,89824.90084],[4.35,0],[20.15,0],[20.35,0],[199.65,0]]},"aerodynamics":{"dragCoefficientCurve":[[0,1.59624],[0.6,1.64945],[0.8,1.83036],[0.9,2.27733],[0.95,3.19253],[1.05,3.87364],[1.2,3.65011],[1.5,2.78814],[2,2.27733],[2.5,2.02192],[3,1.88358],[3.5,1.8091],[4,1.77716],[5,1.75589]],"normalForceCoefficientCurve":[[0,0],[2,2.625],[5,6.7],[10,14],[15,21.875],[20,30],[25,37.5],[30,42.25],[40,45.375]],"controlAuthorityCurve":[[0.0,0.48],[0.5,0.7],[0.8,0.9],[1.0,1.0],[1.2,1.0],[2.0,1.0],[2.8,0.96],[3.5,0.9],[4.5,0.82]]},"limits":{"maxG":40,"maxAoA":30,"maxGRate":150},"launch":{"maxRange":25000,"minRange":24,"cooldownTicks":30,"warmupSeconds":2.5,"carried":4,"rearmTicks":60},"seeker":{"gimbalDegrees":30,"navigationConstant":3.5,"maxLeadTicks":80,"activeHoming":true,"type":"ARH","fovDegrees":6,"activationRange":15000,"velocityGate":13,"velocityGateLookDownOnly":false,"chaffSusceptibility":0.25,"extrapolateOnLoss":false,"extrapolateAfterDecoy":false,"twoWayDatalink":true,"datalinkUpdateSeconds":0.5,"datalinkErrorDegrees":0.3,"scanRateDegreesPerSecond":125,"reacquireSeconds":0.6,"confirmSeconds":0.25,"gimbalMemorySeconds":0.25,"gimbalConfirmSeconds":0.1,"inertialDriftMetresPerSecond":2.0,"burnThroughRange":3000},"loft":{"angleDegrees":3,"fullRange":3330,"minRange":1110,"ceiling":20000},"warhead":{"explosionPower":3,"proximityFuseRadius":10,"armingDistance":24},"carriage":{"dragArea":0.026},"lifetimeTicks":575,"inducedDrag":{"factor":1.0,"speedLossPerG2":0,"speedLossCap":0.05},"referenceShot":{"altitude":8000,"launchSpeed":500,"targetSpeed":500}}}}</script>
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * 0. JSONC \u2014 the dialect the mod's Json.java accepts
+ * ==================================================================== */
+const BS = String.fromCharCode(92);
+
+function stripComments(s) {
+  let out = "", inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i], n = s[i + 1];
+    if (inStr) {
+      out += c;
+      if (esc) esc = false; else if (c === BS) esc = true; else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === "/" && n === "/") { while (i < s.length && s[i] !== "\n") i++; out += "\n"; continue; }
+    if (c === "/" && n === "*") { i += 2; while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++; i++; continue; }
+    out += c;
+  }
+  return out;
+}
+
+function stripTrailingCommas(s) {
+  let out = "", inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      out += c;
+      if (esc) esc = false; else if (c === BS) esc = true; else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === ",") {
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      if (s[j] === "}" || s[j] === "]") continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
+const parseJsonc = t => JSON.parse(stripTrailingCommas(stripComments(t)));
+
+/* ==================================================================== *
+ * 1. Curves \u2014 sort by x, first row wins a duplicate, flat clamp outside
+ *    (su27's lift curve really is written out of order; preserving the
+ *    written order yields a different curve.)
+ * ==================================================================== */
+function curve(rows, fallback) {
+  if (!Array.isArray(rows) || !rows.length) return fallback || null;
+  const pts = [];
+  for (const r of rows) {
+    if (!Array.isArray(r) || r.length !== 2) return fallback || null;
+    const x = +r[0], y = +r[1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return fallback || null;
+    pts.push([x, y]);
+  }
+  pts.sort((a, b) => a[0] - b[0]);           // stable in every modern engine
+  const dedup = [];
+  for (const p of pts) {
+    if (dedup.length && dedup[dedup.length - 1][0] === p[0]) continue;  // first wins
+    dedup.push(p);
+  }
+  return dedup;
+}
+
+function interp(pts, x) {
+  if (!pts || !pts.length) return 0;
+  if (!Number.isFinite(x)) return pts[0][1];
+  if (x <= pts[0][0]) return pts[0][1];
+  const last = pts.length - 1;
+  if (x >= pts[last][0]) return pts[last][1];
+  let lo = 0, hi = last;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= x) lo = m; else hi = m; }
+  const span = pts[hi][0] - pts[lo][0];
+  if (span <= 0) return pts[lo][1];
+  return pts[lo][1] + (pts[hi][1] - pts[lo][1]) * ((x - pts[lo][0]) / span);
+}
+
+const peakY = pts => pts.reduce((m, p) => Math.max(m, p[1]), -Infinity);
+const peakX = pts => pts.reduce((b, p) => (p[1] > b[1] ? p : b), pts[0])[0];
+
+const num = (o, k, d) => {
+  const v = o && o[k];
+  return typeof v === "number" && Number.isFinite(v) ? v : d;
+};
+const positive = (v, d) => (Number.isFinite(v) && v > 0 ? v : d);
+const obj = (o, k) => (o && typeof o[k] === "object" && o[k] && !Array.isArray(o[k]) ? o[k] : null);
+/* Every nested block falls back to the document root, as the Java parser does. */
+const blk = (root, k) => obj(root, k) || root;
+
+/* ==================================================================== *
+ * 2. Atmosphere
+ * ==================================================================== */
+function makeAtmosphere(doc) {
+  const d = doc || {};
+  const seaLevelY = num(d, "seaLevelY", 63);
+  const altitudeScale = positive(num(d, "altitudeScale", 1), 1);
+  /* Fallbacks are the shipped atmosphere, so a document that omits a field
+     degrades to the real ISA rather than to the half-speed scale the model
+     used to run. Gravity is deliberately twice the real 9.81: doubling every
+     speed and altitude while leaving the clock alone doubles every
+     acceleration with them, which is what keeps turn rate, time-to-height and
+     the whole energy-manoeuvrability diagram where they were. */
+  const gravity = positive(num(d, "gravity", 9.81), 9.81);
+  const dens = curve(d.densityCurve, [[0, 1.225]]);
+  const sos = curve(d.speedOfSoundCurve, [[0, 340]]);
+  return {
+    seaLevelY, gravity,
+    alt: worldY => (worldY - seaLevelY) * altitudeScale,
+    density: worldY => Math.max(interp(dens, (worldY - seaLevelY) * altitudeScale), 1e-4),
+    sos: worldY => Math.max(interp(sos, (worldY - seaLevelY) * altitudeScale), 1),
+    mach(v, worldY) { return Math.max(v, 0) / this.sos(worldY); }
+  };
+}
+
+/* ==================================================================== *
+ * 3. Aircraft model
+ * ==================================================================== */
+function aircraft(root, id) {
+  const aero = blk(root, "aerodynamics");
+  const eng = blk(root, "engine");
+  const lim = blk(root, "limits");
+  const res = blk(root, "response");
+  const aoaBlk = blk(root, "angleOfAttackLimiter");
+  const grd = blk(root, "ground");
+  const pub = blk(root, "publishedSpeeds");
+  const fuel = obj(root, "fuel");
+  const flaps = obj(root, "flaps");
+  const radar = obj(root, "radar");
+
+  const cl = curve(aero.liftCoefficientCurve, [[-90, 0], [0, 0], [20, 1.2], [90, 0]]);
+  const cd = curve(aero.dragCoefficientCurve, [[-90, 1.8], [0, .1], [90, 1.8]]);
+  const wave = curve(aero.waveDragMachCurve, [[0, 0]]);
+  const liftAlt = curve(aero.liftAltitudeMultiplierCurve, [[0, 1]]);
+  const thrAlt = curve(eng.thrustAltitudeCurve, [[0, 80000]]);
+  const thrMach = curve(eng.thrustMachCurve, [[0, 1]]);
+  const struct = curve(lim.structuralSpeedLimitCurve, [[0, 250]]);
+  const thrLever = curve(fuel && fuel.throttleThrustCurve, [[0, 0], [1, 1]]);
+  const flow = curve(fuel && fuel.throttleFlowCurve, [[0, 0], [1, 1]]);
+
+  const a = {
+    kind: "aircraft",
+    id: typeof root.id === "string" ? root.id : id,
+    key: id,
+    /* Identifies the document's content for the memo key. This was the
+       JSON's length, which collides far too easily: two edits of the same
+       file almost always have the same length, and the cached curves of the
+       first were then handed back for the second. */
+    stamp: contentStamp(root),
+    mass: positive(num(root, "mass", 12000), 12000),
+    wingArea: positive(num(root, "wingArea", 50), 50),
+    abMult: positive(num(eng, "afterburnerThrustMultiplier", 1), 1),
+    maxG: positive(num(lim, "maxPositiveG", 9), 9),
+    minG: (() => { const v = num(lim, "maxNegativeG", -3); return Number.isFinite(v) && v < 0 ? v : -3; })(),
+    maxPitchRate: positive(num(res, "maxPitchRate", 90), 90),
+    maxRollRate: positive(num(res, "maxRollRate", 270), 270),
+    maxYawRate: positive(num(res, "maxYawRate", 25), 25),
+    limitAoA: positive(num(lim, "limiterAngleOfAttack", num(aoaBlk, "limitAngleOfAttack", 24)), 24),
+    softAoA: positive(num(lim, "limiterSoftStartAngleOfAttack", num(aoaBlk, "softStartAngleOfAttack", 18)), 18),
+    rollingResistance: num(grd, "rollingResistance", 0.02),
+    lateralGrip: num(grd, "lateralGrip", 6),
+    groundThrust: num(grd, "thrustFactor", 1),
+    milSpeed: positive(num(pub, "militaryLevelSpeed", 150), 150),
+    abSpeed: positive(num(pub, "afterburnerLevelSpeed", 180), 180),
+    fuelCapacity: fuel ? Math.max(num(fuel, "capacityLitres", 0), 0) : 0,
+    abFlow: fuel ? num(fuel, "afterburnerFlowMultiplier", 3) : 3,
+    flapLift: flaps ? num(flaps, "liftIncrement", 0.55) : 0.55,
+    flapDrag: flaps ? num(flaps, "dragIncrement", 0.055) : 0.055,
+    flapPlacard: flaps ? positive(num(flaps, "placardSpeed", 80), 80) : 80,
+    radar: radar ? {
+      hScan: positive(num(radar, "horizontalScan", 140), 140),
+      vScan: positive(num(radar, "verticalScan", 140), 140),
+      rateHz: positive(num(radar, "scanRateHz", 5), 5),
+      lockRange: positive(num(radar, "lockRange", 10000), 10000),
+      memory: positive(num(radar, "trackMemorySeconds", 0.5), 0.5),
+      contacts: Math.max(1, Math.min(256, Math.round(positive(num(radar, "maxContacts", 32), 32)))),
+      margin: Math.min(positive(num(radar, "acquireMargin", 0.94), 0.94), 1)
+    } : null,
+    curves: { cl, cd, wave, liftAlt, thrAlt, thrMach, struct, thrLever, flow },
+    CL: d => interp(cl, d),
+    Cd: d => Math.max(0, interp(cd, d)),
+    waveCd: m => Math.max(0, interp(wave, Math.max(m, 0))),
+    structAt: alt => Math.max(interp(struct, alt), 1)
+  };
+
+  a.CLmax = peakY(cl);
+  a.stallAoA = peakX(cl);
+
+  /* The wing fades out with height. FlightModel applies this to lift on every
+     tick, so anything altitude-dependent has to carry it \u2014 without it the
+     service ceiling comes back as whatever the search bound was. */
+  a.liftMult = alt => {
+    const v = interp(liftAlt, alt);
+    return Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : 1;
+  };
+
+  a.thrust = (alt, mach, throttle, spool) => {
+    const stat = Math.max(0, interp(thrAlt, alt));
+    let ram = interp(thrMach, Math.max(mach, 0));
+    if (!Number.isFinite(ram) || ram <= 0) ram = 1;
+    let lever = interp(thrLever, Math.min(Math.max(throttle, 0), 1));
+    lever = Number.isFinite(lever) && lever > 0 ? Math.min(lever, 1) : 0;
+    const burner = 1 + (a.abMult - 1) * Math.min(Math.max(spool, 0), 1);
+    const t = stat * ram * lever * burner;
+    return Number.isFinite(t) && t > 0 ? t : 0;
+  };
+
+  /* Smallest AoA that actually holds level flight. Taking drag at zero
+     incidence draws a top speed the aeroplane cannot reach.
+     C_L rises monotonically up to the stall, so the first crossing can be
+     bisected rather than scanned \u2014 the scan is 600 interpolations deep inside
+     a top-speed sweep, which is where the whole page's time was going. */
+  const alphaCeil = Math.min(30, a.stallAoA);
+  a.alphaForLevel = (rho, v, weight, mult) => {
+    const required = 2 * weight / Math.max(1e-9, rho * v * v * a.wingArea);
+    const k = mult === undefined ? 1 : mult;
+    if (a.CL(0) * k >= required) return 0;
+    if (a.CL(alphaCeil) * k < required) return 30;
+    let lo = 0, hi = alphaCeil;
+    for (let i = 0; i < 20 && hi - lo > 0.05; i++) {
+      const mid = (lo + hi) / 2;
+      if (a.CL(mid) * k >= required) hi = mid; else lo = mid;
+    }
+    /* Snap up to the 0.05-degree lattice the linear scan would have landed on. */
+    return Math.ceil(hi / 0.05) * 0.05;
+  };
+
+  a.levelDrag = (rho, v, mach, weight, mult) => {
+    const alpha = a.alphaForLevel(rho, v, weight, mult);
+    return 0.5 * rho * v * v * a.wingArea * (a.Cd(alpha) + a.waveCd(mach));
+  };
+
+  return a;
+}
+
+/* ---- derived aircraft performance ---------------------------------- */
+function acWeight(a, atm) { return a.mass * atm.gravity; }
+
+/* The ceiling search and the top-speed sweep are the two expensive things on
+   the page, and both are pure in (airframe, altitude). Cleared on upload. */
+const scalarMemo = new Map();
+/* FNV-1a over the serialised document. Cheap, and good enough that two
+   different tunings of the same aeroplane will not share a memo key. */
+function contentStamp(root) {
+  const t = JSON.stringify(root);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) {
+    h ^= t.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36) + "-" + t.length;
+}
+
+function memo(tag, a, extra, fn) {
+  const k = tag + "|" + a.key + "|" + a.stamp + "|" + extra;
+  if (scalarMemo.has(k)) return scalarMemo.get(k);
+  const v = fn();
+  scalarMemo.set(k, v);
+  return v;
+}
+
+function clAt(a, atm, worldY) { return a.CLmax * a.liftMult(atm.alt(worldY)); }
+
+function instantaneousLoad(a, atm, worldY, v) {
+  const rho = atm.density(worldY), W = acWeight(a, atm);
+  const liftLimited = 0.5 * rho * v * v * a.wingArea * clAt(a, atm, worldY) / W;
+  return Math.min(a.maxG, liftLimited);
+}
+
+function turnRate(load, v, g, pitchCap) {
+  if (load <= 1) return 0;
+  const r = (180 / Math.PI) * (g * Math.sqrt(load * load - 1) / v);
+  return pitchCap ? Math.min(r, pitchCap) : r;
+}
+
+function turnRadius(load, v, g) {
+  if (load <= 1) return Infinity;
+  return v * v / (g * Math.sqrt(load * load - 1));
+}
+
+/* Sustained: the hardest pull whose drag the engine still balances. */
+function sustainedLoad(a, atm, worldY, v) {
+  const rho = atm.density(worldY), alt = atm.alt(worldY);
+  const mach = atm.mach(v, worldY), q = 0.5 * rho * v * v;
+  const W = acWeight(a, atm);
+  const thrust = a.thrust(alt, mach, 1, 1);
+  const k = a.liftMult(alt);
+  let holdable = 1;
+  for (let alpha = 1; alpha <= a.stallAoA; alpha += 0.1) {
+    const drag = q * a.wingArea * (a.Cd(alpha) + a.waveCd(mach));
+    if (drag > thrust) break;
+    holdable = Math.min(q * a.wingArea * a.CL(alpha) * k / W, a.maxG);
+  }
+  return holdable;
+}
+
+function sep(a, atm, worldY, v) {
+  const rho = atm.density(worldY), alt = atm.alt(worldY);
+  const mach = atm.mach(v, worldY), W = acWeight(a, atm), k = a.liftMult(alt);
+  return v * (a.thrust(alt, mach, 1, 1) - a.levelDrag(rho, v, mach, W, k)) / W;
+}
+
+/* Level top speed: the last downward zero crossing of excess thrust.
+   A transonic drag hump against a rising ram curve can give more than one. */
+function topSpeed(a, atm, worldY, spool) {
+  return memo("ts", a, worldY + ":" + spool, () => topSpeedRaw(a, atm, worldY, spool));
+}
+function topSpeedRaw(a, atm, worldY, spool) {
+  const rho = atm.density(worldY), alt = atm.alt(worldY), W = acWeight(a, atm);
+  const k = a.liftMult(alt);
+  const excess = v => {
+    const mach = atm.mach(v, worldY);
+    return a.thrust(alt, mach, 1, spool) - a.levelDrag(rho, v, mach, W, k);
+  };
+  let prev = excess(2), highest = 0;
+  for (let v = 2.5; v <= SCAN_TOP; v += 0.5) {
+    const cur = excess(v);
+    if (prev > 0 && cur <= 0) highest = v - 0.5 * cur / (cur - prev);
+    prev = cur;
+  }
+  /* Still pushing at the top of the scan: report the bound, not zero. Drag
+     rises as v^3 against thrust, so this only happens if the bound is too
+     low, never because the aeroplane is genuinely unlimited. */
+  if (highest === 0 && prev > 0) return SCAN_TOP;
+  return highest;
+}
+
+function bestClimb(a, atm, worldY) {
+  return memo("climb", a, worldY, () => bestClimbRaw(a, atm, worldY));
+}
+function bestClimbRaw(a, atm, worldY) {
+  let best = -Infinity;
+  for (let v = 40; v <= SCAN_TOP; v += 2) best = Math.max(best, sep(a, atm, worldY, v));
+  return best;
+}
+
+/* Search bounds. These are not physics; they are how far the solvers look.
+   Both were sized for the half-speed atmosphere and had to move when the
+   model went real: ceilings are now 10-14 km and the fastest aeroplane runs
+   past 700 m/s at height. Sized generously -- these loops are memoised. */
+const SCAN_TOP = 1200;         /* m/s */
+const CEILING_STEP_M = 100;
+const CEILING_STEPS = 300;     /* to 30 km, above any lift-fade curve */
+
+/* Highest level the wing and the engine can both still hold.
+   The lift-fade curve is what actually stops the climb; a search that ignores
+   it just reports its own upper bound. */
+function ceiling(a, atm) {
+  return memo("ceil", a, 0, () => ceilingRaw(a, atm));
+}
+function ceilingRaw(a, atm) {
+  let best = atm.seaLevelY;
+  for (let i = 0; i <= CEILING_STEPS; i++) {
+    const worldY = atm.seaLevelY + i * CEILING_STEP_M;
+    const rho = atm.density(worldY), alt = atm.alt(worldY), W = acWeight(a, atm);
+    const k = a.liftMult(alt);
+    if (k <= 1e-6) break;
+    let ok = false;
+    for (let v = 20; v <= SCAN_TOP; v += 5) {
+      const mach = atm.mach(v, worldY);
+      const required = 2 * W / Math.max(1e-9, rho * v * v * a.wingArea);
+      if (required > a.CLmax * k) continue;
+      if (a.thrust(alt, mach, 1, 1) >= a.levelDrag(rho, v, mach, W, k)) { ok = true; break; }
+    }
+    if (ok) best = worldY; else break;
+  }
+  return atm.alt(best);
+}
+
+function stallSpeed(a, atm, worldY) {
+  const rho = atm.density(worldY);
+  return Math.sqrt(2 * acWeight(a, atm) / (rho * a.wingArea * clAt(a, atm, worldY)));
+}
+
+function cornerSpeed(a, atm, worldY) {
+  /* Where the binding constraint flips from wing to structure. */
+  const rho = atm.density(worldY), W = acWeight(a, atm);
+  return Math.sqrt(2 * a.maxG * W / (rho * a.wingArea * clAt(a, atm, worldY)));
+}
+
+/* ==================================================================== *
+ * 4. Missile model
+ * ==================================================================== */
+function missile(root, id) {
+  const motor = blk(root, "motor");
+  const aero = blk(root, "aerodynamics");
+  const lim = blk(root, "limits");
+  const ref = blk(root, "referenceShot");
+  const launch = obj(root, "launch");
+  const seeker = obj(root, "seeker");
+  const warhead = obj(root, "warhead");
+  const carriage = obj(root, "carriage");
+  const loft = obj(root, "loft");
+
+  const thrustCurve = curve(motor.thrustCurve, [[0, 0]]);
+  const dragCurve = curve(aero.dragCoefficientCurve, [[0, 0.3]]);
+  const cnCurve = curve(aero.normalForceCoefficientCurve, [[0, 0], [25, 12]]);
+  const authCurve = curve(aero.controlAuthorityCurve, [[0, 1]]);
+
+  const m = {
+    kind: "missile",
+    id: typeof root.id === "string" ? root.id : id,
+    key: id,
+    mass: positive(num(root, "mass", 150), 150),
+    referenceArea: positive(num(root, "referenceArea", 0.025), 0.025),
+    length: positive(num(root, "length", 3.6), 3.6),
+    maxG: positive(num(lim, "maxG", 30), 30),
+    maxAoA: positive(num(lim, "maxAoA", 25), 25),
+    lifetimeTicks: Math.round(positive(num(root, "lifetimeTicks", 480), 480)),
+    refAltitude: num(ref, "altitude", 5000),
+    refLaunchSpeed: positive(num(ref, "launchSpeed", 340), 340),
+    refTargetSpeed: positive(num(ref, "targetSpeed", 340), 340),
+    maxRange: launch ? num(launch, "maxRange", NaN) : NaN,
+    minRange: launch ? num(launch, "minRange", NaN) : NaN,
+    cone: launch ? num(launch, "coneDegrees", NaN) : NaN,
+    cooldown: launch ? num(launch, "cooldownTicks", NaN) : NaN,
+    carried: launch ? num(launch, "carried", NaN) : NaN,
+    rearm: launch ? num(launch, "rearmTicks", NaN) : NaN,
+    gimbal: seeker ? num(seeker, "gimbalDegrees", NaN) : NaN,
+    navConstant: seeker ? num(seeker, "navigationConstant", NaN) : NaN,
+    maxLeadTicks: seeker ? num(seeker, "maxLeadTicks", NaN) : NaN,
+    activeHoming: seeker && typeof seeker.activeHoming === "boolean" ? seeker.activeHoming : null,
+    explosionPower: warhead ? num(warhead, "explosionPower", NaN) : NaN,
+    fuseRadius: warhead ? num(warhead, "proximityFuseRadius", NaN) : NaN,
+    armingDistance: warhead ? num(warhead, "armingDistance", NaN) : NaN,
+    carriedMass: root.mass !== undefined ? num(root, "mass", NaN)
+      : (carriage ? num(carriage, "massKilograms", NaN) : NaN),
+    carriedDragArea: carriage ? num(carriage, "dragArea", NaN) : NaN,
+    curves: { thrustCurve, dragCurve, cnCurve, authCurve },
+    thrust: t => { const v = interp(thrustCurve, Math.max(t, 0)); return Number.isFinite(v) && v > 0 ? v : 0; },
+    Cd: mach => { const v = interp(dragCurve, Math.max(mach, 0)); return v > 0 ? v : 0; },
+    Cn: aoa => { const v = interp(cnCurve, Math.abs(aoa)); return v > 0 ? v : 0; },
+    authority: mach => { const v = interp(authCurve, Math.max(mach, 0)); return v <= 0 ? 0 : Math.min(v, 1); }
+  };
+  m.lifeSeconds = m.lifetimeTicks / 20;
+  m.invSos = 1 / 340;   /* replaced per altitude before every integration */
+
+  /* Midcourse loft. A document that says nothing about it flies exactly the
+     trajectory every round flew before the mechanism existed, which is what
+     keeps this additive. The taper schedule is usually left out: what varies
+     between rounds is how high they fly, not the shape of the taper, so it
+     hangs on the round own reach -- full angle beyond 45 per cent of the
+     range it may be fired at, gone by 15 per cent of it. */
+  const loftDeg = loft ? num(loft, "angleDegrees", 0) : 0;
+  m.loftAngleDegrees = Number.isFinite(loftDeg) && loftDeg > 0 ? loftDeg : 0;
+  m.loftAngle = m.loftAngleDegrees * Math.PI / 180;
+  if (m.loftAngle > 0) {
+    const reach = Number.isFinite(m.maxRange) && m.maxRange > 0 ? m.maxRange : 20000;
+    m.loftFullRange = loft && Number.isFinite(num(loft, "fullRange", NaN))
+      ? num(loft, "fullRange", NaN) : reach * 0.45;
+    m.loftMinRange = loft && Number.isFinite(num(loft, "minRange", NaN))
+      ? num(loft, "minRange", NaN) : reach * 0.15;
+    m.loftCeiling = loft && Number.isFinite(num(loft, "ceiling", NaN))
+      ? num(loft, "ceiling", NaN) : Infinity;
+  } else {
+    m.loftFullRange = NaN; m.loftMinRange = NaN; m.loftCeiling = Infinity;
+  }
+
+  /* Last x whose y is positive, then the next x \u2014 the moment thrust ends. */
+  m.burnout = (() => {
+    for (let i = thrustCurve.length - 1; i >= 0; i--) {
+      if (thrustCurve[i][1] > 0) return i + 1 < thrustCurve.length ? thrustCurve[i + 1][0] : thrustCurve[i][0];
+    }
+    return 0;
+  })();
+
+  m.totalImpulse = (() => {
+    let s = 0;
+    for (let i = 1; i < thrustCurve.length; i++) {
+      s += 0.5 * (thrustCurve[i][0] - thrustCurve[i - 1][0]) * (thrustCurve[i][1] + thrustCurve[i - 1][1]);
+    }
+    return s;
+  })();
+
+  return m;
+}
+
+const DT = 0.05;
+
+/* One step along the chase axis. Gravity is applied then projected back out \u2014
+   integrating a free body draws a ballistic fall as if it were speed.
+   Density and speed of sound are hoisted in by the caller: for a level shot
+   they are constant, and looking them up per step is a binary search a
+   couple of million times over. */
+function advanceLevel(m, rho, speed, t) {
+  const mass = Math.max(m.mass, 1e-6);
+  const V = Math.max(speed, 0);
+  const thrust = m.thrust(t);
+  let axial = thrust;
+  if (V > 1e-4) {
+    axial -= 0.5 * rho * V * V * m.referenceArea * m.Cd(V * m.invSos);
+  }
+  const next = V + axial * (DT / mass);
+  if (thrust <= 0 && next < 0) return 0;
+  return Math.max(0, next);
+}
+
+/* ---- midcourse loft ------------------------------------------------
+   A long shot spent down in thick air is mostly spent on drag, so a round
+   with a loft is told to aim above the target on the way out, climbs into
+   cheaper air, and trades the height back at the end. It is a guidance bias,
+   not a separate mode: the angle tapers away with range and again as the
+   round nears its ceiling, so nothing has to decide when the loft ends.
+
+   Ported from MissilePolicy.loftAngle. Full angle beyond loftFullRange,
+   nothing inside loftMinRange, a straight taper between, faded out over the
+   last LOFT_CEILING_FADE blocks below the ceiling -- a hard cut-off there
+   makes the round porpoise. */
+const LOFT_CEILING_FADE = 500.0;
+const MAX_LOFT_ELEVATION = 75 * Math.PI / 180;
+
+function loftAngleAt(m, range, worldY) {
+  if (!m.loftAngle || !(m.loftAngle > 0) || !Number.isFinite(range)) return 0;
+  const full = m.loftFullRange, min = m.loftMinRange;
+  if (!Number.isFinite(full) || !Number.isFinite(min) || full <= min) return 0;
+  if (range <= min) return 0;
+  let taper = range >= full ? 1 : (range - min) / (full - min);
+  const ceiling = m.loftCeiling;
+  if (Number.isFinite(ceiling) && Number.isFinite(worldY)) {
+    const room = ceiling - worldY;
+    if (room <= 0) return 0;
+    if (room < LOFT_CEILING_FADE) taper *= room / LOFT_CEILING_FADE;
+  }
+  return m.loftAngle * taper;
+}
+
+/**
+ * Flies the round in the vertical plane against a closing target.
+ *
+ * <p>The level chase the other missile charts chase is deliberately 1-D: it
+ * answers "how fast, for how long" and altitude never enters it. A loft is
+ * about altitude, so it cannot be seen there at all -- the whole gain is that
+ * the round spends its cruise in air that costs less, and air only gets
+ * cheaper if the round is allowed to climb. So this is a two-dimensional
+ * point mass: ground range and height, atmosphere resampled every step.</p>
+ *
+ * <p>Guidance is the shipped rule -- aim along the line of sight with its
+ * elevation raised by the loft angle -- and the velocity is turned toward that
+ * aim point no harder than the round's own available load allows, so a heavy
+ * round low on energy cannot simply snap onto the new heading.</p>
+ *
+ * @param lofted false flies the identical round with the loft forced off,
+ *               which is the only honest way to say what the loft is worth
+ */
+function flyProfile(m, atm, opts) {
+  const launchY = atm.seaLevelY + opts.launchAltitude;
+  const lofted = opts.lofted !== false;
+  const dt = DT;
+  const mass = Math.max(m.mass, 1e-6);
+
+  let x = 0, y = launchY;                 /* ground range covered, world Y */
+  let vx = opts.launchSpeed, vy = 0;
+  let tx = opts.launchRange, ty = launchY; /* target, closing head-on */
+  let t = 0, apex = launchY, hit = false;
+  /* Arrival speed is the speed at closest approach, not at the end of the
+     round life. A lofted path is a longer path, so a round can still be
+     coasting when its clock runs out -- reporting that number would say the
+     loft cost speed when what it cost was time. */
+  let closest = Infinity, arrivalSpeed = 0, arrivalTime = 0;
+  const xs = [], alts = [], speeds = [], times = [];
+  const horizon = Math.min(m.lifeSeconds, 180);
+  const sample = Math.max(1, Math.round(horizon / dt / 240));
+  let i = 0;
+
+  while (t < horizon) {
+    const speed = Math.hypot(vx, vy);
+    if (i % sample === 0) {
+      xs.push(x); alts.push(y - atm.seaLevelY); speeds.push(speed); times.push(t);
+    }
+    i++;
+
+    tx -= opts.targetSpeed * dt;           /* head-on closure */
+    const dx = tx - x, dy = ty - y;
+    const range = Math.hypot(dx, dy);
+    if (range < closest) { closest = range; arrivalSpeed = speed; arrivalTime = t; }
+    if (range <= Math.max(opts.hitRadius || 24, speed * dt)) { hit = true; break; }
+
+    /* Aim: line of sight, elevation raised by whatever loft is still in force. */
+    const losEl = Math.atan2(dy, dx);
+    const raise = lofted ? loftAngleAt(m, range, y) : 0;
+    const aimEl = Math.min(losEl + raise, MAX_LOFT_ELEVATION);
+
+    /* Turn the velocity toward the aim point, capped by available load. */
+    if (speed > 1e-4) {
+      const velEl = Math.atan2(vy, vx);
+      let err = aimEl - velEl;
+      while (err > Math.PI) err -= 2 * Math.PI;
+      while (err < -Math.PI) err += 2 * Math.PI;
+      const load = availableLoadG(m, atm, speed, y);
+      const maxTurn = load * atm.gravity / speed * dt;   /* radians this step */
+      const turn = Math.max(-maxTurn, Math.min(maxTurn, err));
+      const el = velEl + turn;
+      vx = Math.cos(el) * speed;
+      vy = Math.sin(el) * speed;
+    }
+
+    /* Axial forces along the flight path, plus weight. */
+    const rho = atm.density(y), sos = atm.sos(y);
+    const V = Math.hypot(vx, vy);
+    const thrust = m.thrust(t);
+    let axial = thrust;
+    if (V > 1e-4) axial -= 0.5 * rho * V * V * m.referenceArea * m.Cd(V / sos);
+    const a = axial / mass;
+    if (V > 1e-4) { vx += (vx / V) * a * dt; vy += (vy / V) * a * dt; }
+    vy -= atm.gravity * dt;
+
+    x += vx * dt; y += vy * dt;
+    if (y > apex) apex = y;
+    if (y <= atm.seaLevelY) break;         /* flown into the ground */
+    t += dt;
+  }
+
+  return {
+    xs, alts, speeds, times, hit,
+    terminalSpeed: arrivalSpeed,
+    closestApproach: closest,
+    arrivalTime,
+    apexAltitude: apex - atm.seaLevelY,
+    apexGain: apex - launchY,
+    flightSeconds: t
+  };
+}
+
+/** The reference lofted shot: fired from its own permitted maximum range. */
+function loftShot(m, atm, lofted) {
+  const range = Number.isFinite(m.maxRange) && m.maxRange > 0
+    ? m.maxRange : 20000;
+  return flyProfile(m, atm, {
+    launchAltitude: 6000, launchSpeed: 450, targetSpeed: 450,
+    launchRange: range, lofted
+  });
+}
+
+function availableLoadG(m, atm, speed, worldY) {
+  if (!Number.isFinite(speed) || speed <= 0) return 0;
+  const rho = atm.density(worldY), a = atm.sos(worldY), g = atm.gravity;
+  const mach = speed / a, q = 0.5 * rho * speed * speed;
+  const normal = q * m.referenceArea * m.Cn(m.maxAoA) * m.authority(mach);
+  const weight = m.mass * g;
+  const load = normal / weight;
+  return Number.isFinite(load) && load > 0 ? Math.min(load, m.maxG) : 0;
+}
+
+function atAltitude(m, atm, worldY) {
+  m.invSos = 1 / atm.sos(worldY);
+  return atm.density(worldY);
+}
+
+function launchSpeedOf(m) {
+  return state.launchSpeed == null ? m.refLaunchSpeed : state.launchSpeed;
+}
+function missileFlight(m, atm, worldY, launchSpeed, horizon) {
+  const rho = atAltitude(m, atm, worldY);
+  const xs = [], ys = [], dist = [];
+  let v = launchSpeed, t = 0, d = 0;
+  const steps = Math.ceil(horizon / DT);
+  const every = Math.max(1, Math.floor(steps / 72));
+  for (let i = 0; i < steps; i++) {
+    if (i % every === 0) { xs.push(t); ys.push(v); dist.push(d); }
+    d += v * DT;   /* ground covered so far \u2014 left-Riemann sum on this same v */
+    v = advanceLevel(m, rho, v, t);
+    t += DT;
+  }
+  return { xs, ys, dist };
+}
+
+/* NEZ, bounded by the round's own life \u2014 the number the item tooltip shows.
+   Note the ordering: advance, then accumulate. The console chart accumulates
+   first and breaks on `closure < best`, which fires on the very first tick
+   (every motor opens with a separation delay at zero thrust) and returns a
+   flat zero for any launch at or below the target's speed. */
+function nez(m, atm, worldY, launchSpeed, targetSpeed) {
+  const rho = atAltitude(m, atm, worldY);
+  const horizon = Math.min(m.lifeSeconds, 180);
+  let v = launchSpeed, closure = 0, best = 0, t = 0;
+  while (t < horizon) {
+    v = advanceLevel(m, rho, v, t);
+    closure += (v - targetSpeed) * DT;
+    if (closure > best) best = closure;
+    if (v <= targetSpeed && t > m.burnout) break;
+    t += DT;
+  }
+  return best;
+}
+
+function missileHeadline(m, atm) {
+  const worldY = m.refAltitude + atm.seaLevelY;
+  const rho = atAltitude(m, atm, worldY);
+  const horizon = Math.min(m.lifeSeconds, 180);
+  let v = m.refLaunchSpeed, t = 0, peak = 0, tPeak = 0, peakLoad = 0, burnoutSpeed = 0;
+  while (t < horizon) {
+    v = advanceLevel(m, rho, v, t);
+    if (v > peak) { peak = v; tPeak = t + DT; }
+    peakLoad = Math.max(peakLoad, availableLoadG(m, atm, v, worldY));
+    if (t <= m.burnout && t + DT > m.burnout) burnoutSpeed = v;
+    if (v <= m.refTargetSpeed && t > m.burnout) break;
+    t += DT;
+  }
+  return {
+    peakSpeed: peak,
+    peakMach: peak / atm.sos(worldY),
+    timeToPeak: tPeak,
+    burnoutSpeed,
+    maxLoadG: peakLoad,
+    nez: nez(m, atm, worldY, m.refLaunchSpeed, state.targetSpeed),
+    totalImpulse: m.totalImpulse
+  };
+}
+
+/* ==================================================================== *
+ * 5. Axis policy \u2014 ported from the mod's ChartPolicy
+ * ==================================================================== */
+function niceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  const snapped = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return snapped * mag;
+}
+
+function axis(lo, hi, pinMax) {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { min: 0, max: 1, step: 1 };
+  /* A pinned ceiling makes every chart of the same quantity share one scale,
+     so two panels can be read against each other rather than each against
+     its own private maximum. */
+  if (Number.isFinite(pinMax) && pinMax > 0) {
+    const min = lo < 0 ? Math.min(lo, 0) : 0;
+    const step = niceStep((pinMax - min) / 5);
+    return { min: Math.floor(min / step) * step, max: pinMax, step };
+  }
+  if (hi - lo < 1e-9) {
+    const pad = Math.abs(hi) > 1e-9 ? Math.abs(hi) * 0.1 : 1;
+    lo -= pad; hi += pad;
+  }
+  const span = hi - lo;
+  const padLo = lo < 0 ? span * 0.05 : Math.max(0, Math.min(lo, span * 0.05));
+  const padHi = span * 0.05;
+  let low = lo - padLo, high = hi + padHi;
+  if (lo >= 0 && low < 0) low = 0;
+  const step = niceStep((high - low) / 5);
+  return { min: Math.floor(low / step) * step, max: Math.ceil(high / step) * step, step };
+}
+
+const decimals = step => Math.max(0, Math.min(4, Math.ceil(-Math.log10(step))));
+const fmtTick = (v, step) => v.toFixed(decimals(step));
+
+/* ==================================================================== *
+ * 6. Shared scales and units
+ * ==================================================================== */
+
+/* Fixed ceilings, in metric base units, applied to every chart carrying that
+   quantity. Comparability is the whole point of the page: an axis that
+   rescales itself per panel makes two panels look alike when they are not.
+   `speedTrace` is the one exception: the missile speed-vs-time trace keeps a
+   much wider ceiling, since a boosting round runs far past anything the
+   aircraft and launch-speed axes are read against.
+
+   Both were raised when the model moved off the half-speed scale onto the real
+   atmosphere: every speed in the game's files doubled, so a ceiling that used
+   to frame the fleet now cuts it in half. */
+const AXIS_DEFAULT = Object.freeze(
+  { speed: 800, speedTrace: 2000, altitude: 8000, load: 80 });
+
+/* Mutable, but only through setAxis: every ceiling is also a sampling bound,
+   so a change has to invalidate the series cache or the old curves are drawn
+   against the new scale. The object identity never changes, which is what
+   lets the chart builders close over it. */
+const AXIS_MAX = Object.assign({}, AXIS_DEFAULT);
+
+try {
+  const saved = JSON.parse(localStorage.getItem("fmb.axes") || "null");
+  if (saved) {
+    for (const q in AXIS_DEFAULT) {
+      if (Number.isFinite(saved[q]) && saved[q] > 0) AXIS_MAX[q] = saved[q];
+    }
+  }
+} catch (e) { /* blocked storage: the defaults stand */ }
+
+const UNITS = {
+  metric: {
+    speed: { f: v => v, inv: v => v, s: "m/s", d: 0 },
+    dist: { f: v => v / 1000, inv: v => v * 1000, s: "km", d: v => (v < 10000 ? 1 : 0) },
+    alt: { f: v => v, inv: v => v, s: "m", d: 0 }
+  },
+  mc: {
+    speed: { f: v => v / 20, inv: v => v * 20, s: "b/t", d: 2 },
+    dist: { f: v => v, inv: v => v, s: "blocks", d: 0 },
+    alt: { f: v => v, inv: v => v, s: "blocks", d: 0 }
+  }
+};
+let units = "metric";
+const uSpeed = v => UNITS[units].speed.f(v);
+const uSpeedLabel = () => UNITS[units].speed.s;
+const uDist = v => UNITS[units].dist.f(v);
+const uDistLabel = () => UNITS[units].dist.s;
+
+function fmt(v, dp) {
+  if (!Number.isFinite(v)) return "\u2014";
+  if (v === Infinity) return "\u221e";
+  return v.toFixed(dp === undefined ? (Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2) : dp);
+}
+
+/* ==================================================================== *
+ * 7. SVG line chart with crosshair + tooltip
+ * ==================================================================== */
+const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const MAX_OVERLAY = 8;
+
+function svgEl(name, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function lineChart(host, spec) {
+  const W = 560, H = spec.compact ? 190 : 268;
+  const M = { l: 52, r: spec.compact ? 12 : 74, t: 12, b: 40 };
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+
+  const series = spec.series.filter(s => s.xs.length > 1);
+  if (!series.length) {
+    host.innerHTML = '<p class="note">Nothing selected.</p>';
+    return;
+  }
+
+  let xlo = Infinity, xhi = -Infinity, ylo = Infinity, yhi = -Infinity;
+  for (const s of series) {
+    for (let i = 0; i < s.xs.length; i++) {
+      const x = s.xs[i], y = s.ys[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < xlo) xlo = x; if (x > xhi) xhi = x;
+      if (y < ylo) ylo = y; if (y > yhi) yhi = y;
+    }
+  }
+  const ax = axis(xlo, xhi, spec.xMax), ay = axis(ylo, yhi, spec.yMax);
+  const px = v => M.l + (v - ax.min) / (ax.max - ax.min) * iw;
+  const py = v => M.t + ih - (v - ay.min) / (ay.max - ay.min) * ih;
+
+  /* Anything a pinned axis cuts off is named rather than silently dropped. */
+  const over = [];
+  for (const s of series) {
+    let beyond = false;
+    for (let i = 0; i < s.xs.length; i++) {
+      if (Number.isFinite(s.ys[i]) && s.ys[i] > ay.max + 1e-9) beyond = true;
+    }
+    if (beyond && s.name) over.push(s.name);
+  }
+
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": spec.title + ". " + spec.yLabel + " against " + spec.xLabel
+  });
+
+  const clipId = "c" + Math.random().toString(36).slice(2, 9);
+  const defs = svgEl("defs", {});
+  const cp = svgEl("clipPath", { id: clipId });
+  cp.appendChild(svgEl("rect", { x: M.l, y: M.t, width: iw, height: ih }));
+  defs.appendChild(cp);
+  svg.appendChild(defs);
+
+  for (let v = ax.min; v <= ax.max + 1e-9; v += ax.step) {
+    svg.appendChild(svgEl("line", { x1: px(v), y1: M.t, x2: px(v), y2: M.t + ih, stroke: "var(--grid)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: px(v), y: M.t + ih + 14, "text-anchor": "middle", class: "tick" });
+    t.textContent = fmtTick(v, ax.step); svg.appendChild(t);
+  }
+  for (let v = ay.min; v <= ay.max + 1e-9; v += ay.step) {
+    svg.appendChild(svgEl("line", { x1: M.l, y1: py(v), x2: M.l + iw, y2: py(v), stroke: "var(--grid)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: M.l - 7, y: py(v) + 3.4, "text-anchor": "end", class: "tick" });
+    t.textContent = fmtTick(v, ay.step); svg.appendChild(t);
+  }
+  if (ay.min < 0 && ay.max > 0) {
+    svg.appendChild(svgEl("line", { x1: M.l, y1: py(0), x2: M.l + iw, y2: py(0), stroke: "var(--muted)", "stroke-width": 1 }));
+  }
+  svg.appendChild(svgEl("line", { x1: M.l, y1: M.t, x2: M.l, y2: M.t + ih, stroke: "var(--muted)", "stroke-width": 1 }));
+  svg.appendChild(svgEl("line", { x1: M.l, y1: M.t + ih, x2: M.l + iw, y2: M.t + ih, stroke: "var(--muted)", "stroke-width": 1 }));
+
+  const xt = svgEl("text", { x: M.l, y: H - 6, class: "axis-title" });
+  xt.textContent = spec.xLabel; svg.appendChild(xt);
+  const yt = svgEl("text", { x: 0, y: 0, class: "axis-title", transform: `translate(11 ${M.t + ih}) rotate(-90)` });
+  yt.textContent = spec.yLabel; svg.appendChild(yt);
+
+  const plotted = svgEl("g", { "clip-path": "url(#" + clipId + ")" });
+  for (const s of series) {
+    let d = "", pen = false;
+    for (let i = 0; i < s.xs.length; i++) {
+      const x = s.xs[i], y = s.ys[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { pen = false; continue; }
+      d += (pen ? "L" : "M") + px(x).toFixed(2) + " " + py(y).toFixed(2) + " ";
+      pen = true;
+    }
+    plotted.appendChild(svgEl("path", {
+      d, fill: "none", stroke: s.color, "stroke-width": s.emphasis ? 2.4 : 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round",
+      "stroke-dasharray": s.dash || "none", opacity: s.faded ? 0.28 : 1
+    }));
+  }
+  svg.appendChild(plotted);
+
+  /* Direct labels at the right-hand end. Contrast relief for the lighter
+     hues, and it removes a legend lookup for up to four series. */
+  if (!spec.compact && series.length <= 4) {
+    const taken = [];
+    for (const s of series) {
+      let li = s.xs.length - 1;
+      while (li >= 0 && !Number.isFinite(s.ys[li])) li--;
+      if (li < 0) continue;
+      let y = Math.min(M.t + ih, Math.max(M.t, py(s.ys[li])));
+      while (taken.some(t => Math.abs(t - y) < 11)) y += 11;
+      taken.push(y);
+      const t = svgEl("text", { x: M.l + iw + 6, y: y + 3.4, class: "endlabel", fill: s.color });
+      t.textContent = s.name; svg.appendChild(t);
+    }
+  }
+
+  const cross = svgEl("line", { y1: M.t, y2: M.t + ih, stroke: "var(--ink-soft)", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0 });
+  svg.appendChild(cross);
+  const dots = series.map(s => {
+    const c = svgEl("circle", { r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2, opacity: 0 });
+    svg.appendChild(c); return c;
+  });
+
+  host.appendChild(svg);
+  const tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true;
+  host.appendChild(tip);
+
+  const hit = svgEl("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent", style: "cursor:crosshair" });
+  svg.appendChild(hit);
+
+  function move(ev) {
+    const r = svg.getBoundingClientRect();
+    const sx = (ev.clientX - r.left) / r.width * W;
+    if (sx < M.l || sx > M.l + iw) return hide();
+    const xv = ax.min + (sx - M.l) / iw * (ax.max - ax.min);
+    cross.setAttribute("x1", sx); cross.setAttribute("x2", sx); cross.setAttribute("opacity", 1);
+    let rows = "";
+    series.forEach((s, i) => {
+      let best = -1, bd = Infinity;
+      for (let k = 0; k < s.xs.length; k++) {
+        const d = Math.abs(s.xs[k] - xv);
+        if (d < bd) { bd = d; best = k; }
+      }
+      if (best < 0 || !Number.isFinite(s.ys[best])) { dots[i].setAttribute("opacity", 0); return; }
+      dots[i].setAttribute("cx", px(s.xs[best]));
+      dots[i].setAttribute("cy", py(s.ys[best]));
+      dots[i].setAttribute("opacity", 1);
+      rows += `<u><span><i style="background:${s.color}"></i>${s.name}</span><span>${fmt(s.ys[best])}</span></u>`;
+      /* Opt-in second line: only series carrying `.extra` (the missile
+         speed-vs-time trace's flown distance) grow a tooltip row for it. */
+      if (s.extra && Number.isFinite(s.extra[best])) {
+        rows += `<u style="opacity:.62"><span style="padding-left:13px">${s.extraLabel || "extra"}</span><span>${fmt(s.extra[best])}${s.extraUnit ? " " + s.extraUnit : ""}</span></u>`;
+      }
+    });
+    tip.innerHTML = `<b>${spec.xLabel.split(" (")[0]} ${fmt(xv)}</b>${rows}`;
+    tip.hidden = false;
+    const hr = host.getBoundingClientRect();
+    let left = ev.clientX - hr.left + 14;
+    if (left + tip.offsetWidth > hr.width) left = ev.clientX - hr.left - tip.offsetWidth - 14;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = Math.max(0, ev.clientY - hr.top - 10) + "px";
+  }
+  function hide() {
+    cross.setAttribute("opacity", 0);
+    dots.forEach(d => d.setAttribute("opacity", 0));
+    tip.hidden = true;
+  }
+  hit.addEventListener("mousemove", move);
+  hit.addEventListener("mouseleave", hide);
+  return { over };
+}
+
+/* ==================================================================== *
+ * 8. State
+ * ==================================================================== */
+const RAW = JSON.parse(document.getElementById("bundle").textContent);
+
+const state = {
+  domain: "aircraft",
+  tab: "performance",
+  mode: "overlay",
+  altitude: 0,
+  targetSpeed: 340,
+  launchSpeed: null,   /* null = each round's own reference launch speed */
+  selected: { aircraft: [], missile: [] },
+  /* `environment` is null until one is dropped in, and the bundled atmosphere
+     stands in until then. It sits alongside the aircraft and rounds because it
+     is the same kind of thing: a document the game reads, which the page has
+     to be able to read too. */
+  uploads: { aircraft: {}, missile: {}, environment: null }
+};
+
+/* Not const: every number on the page is computed against the atmosphere, so
+   dropping a new environment.json has to be able to replace it outright. */
+let atm = makeAtmosphere(RAW.environment);
+
+/** Whether the atmosphere in force came from the user rather than the bundle. */
+function environmentIsCustom() {
+  return state.uploads.environment != null;
+}
+
+/** Rebuilds the atmosphere from whichever document is in force. */
+function rebuildAtmosphere() {
+  atm = makeAtmosphere(state.uploads.environment || RAW.environment);
+}
+
+/* The bundled fleet first, then uploads on top: a dropped file with a
+   bundled id replaces that aircraft rather than sitting beside it, and a
+   file with a new id simply joins. `fromUpload` is what the picker and the
+   byline use to say which is which. */
+function buildModels() {
+  const out = { aircraft: {}, missile: {} };
+  for (const k in RAW.aircraft) out.aircraft[k] = aircraft(RAW.aircraft[k], k);
+  for (const k in RAW.missile) out.missile[k] = missile(RAW.missile[k], k);
+  for (const k in state.uploads.aircraft) {
+    out.aircraft[k] = aircraft(state.uploads.aircraft[k], k);
+    out.aircraft[k].fromUpload = true;
+  }
+  for (const k in state.uploads.missile) {
+    out.missile[k] = missile(state.uploads.missile[k], k);
+    out.missile[k].fromUpload = true;
+  }
+  return out;
+}
+let MODELS = buildModels();
+
+const keys = d => Object.keys(MODELS[d]).sort();
+const sel = () => state.selected[state.domain];
+const worldY = () => atm.seaLevelY + state.altitude;
+
+function colorOf(key) {
+  const i = sel().indexOf(key);
+  return i >= 0 && i < SERIES_VARS.length ? `var(${SERIES_VARS[i]})` : "var(--muted)";
+}
+
+/* Restore any previous session's uploads. */
+try {
+  const saved = localStorage.getItem("fmb.uploads");
+  if (saved) {
+    const u = JSON.parse(saved);
+    if (u && u.aircraft && u.missile) {
+      /* environment arrived later than the other two, so a session saved
+         before it existed restores without the key rather than failing. */
+      state.uploads = { environment: null, ...u };
+      rebuildAtmosphere();
+    }
+  }
+} catch (e) { /* private window, blocked storage \u2014 uploads just won't persist */ }
+
+function persist() {
+  try { localStorage.setItem("fmb.uploads", JSON.stringify(state.uploads)); } catch (e) { }
+}
+
+MODELS = buildModels();
+state.selected.aircraft = keys("aircraft").slice(0, MAX_OVERLAY);
+state.selected.missile = keys("missile").slice(0, MAX_OVERLAY);
+
+/* ==================================================================== *
+ * 9. Series builders
+ * ==================================================================== */
+function sampleAircraft(a, fn, lo, hi, n) {
+  const xs = [], ys = [];
+  for (let i = 0; i < n; i++) {
+    const x = lo + (hi - lo) * i / (n - 1);
+    xs.push(uSpeed(x)); ys.push(fn(x));
+  }
+  return { xs, ys };
+}
+
+const CHARTS = {
+  aircraft: [
+    {
+      id: "doghouse", title: "Instantaneous turn rate",
+      xq: "speed",
+      x: () => "Speed (" + uSpeedLabel() + ")", y: "Turn rate (deg/s)",
+      sub: a => "lift-limited below the corner, structure-limited above, capped at " + fmt(a.maxPitchRate, 0) + " deg/s pitch",
+      build: a => sampleAircraft(a, v => turnRate(instantaneousLoad(a, atm, worldY(), v), v, atm.gravity, a.maxPitchRate), 20, AXIS_MAX.speed, 72)
+    },
+    {
+      id: "sustained", title: "Sustained turn rate",
+      xq: "speed",
+      x: () => "Speed (" + uSpeedLabel() + ")", y: "Turn rate (deg/s)",
+      /* Swept only to 400: past the speed where burner thrust no longer
+         balances the drag of even a gentle pull the answer is a flat zero,
+         and a long dead tail squeezes the part worth reading. */
+      sub: () => "the hardest pull the engine still balances, full burner",
+      build: a => sampleAircraft(a, v => turnRate(sustainedLoad(a, atm, worldY(), v), v, atm.gravity, a.maxPitchRate), 60, AXIS_MAX.speed, 72)
+    },
+    {
+      id: "sep", title: "Specific excess power",
+      xq: "speed",
+      x: () => "Speed (" + uSpeedLabel() + ")", y: "SEP (m/s)",
+      sub: () => "full burner \u2014 where it crosses zero is the level top speed",
+      build: a => sampleAircraft(a, v => sep(a, atm, worldY(), v), 20, AXIS_MAX.speed, 72)
+    },
+    {
+      id: "envelope", title: "Max level speed vs altitude",
+      xq: "altitude", yq: "speed",
+      x: () => "Altitude (" + UNITS[units].alt.s + ")", y: () => "Max speed (" + uSpeedLabel() + ")",
+      sub: () => "burner, thrust against level drag",
+      build: a => {
+        const xs = [], ys = [];
+        const n = 41;
+        for (let i = 0; i < n; i++) {
+          const alt = AXIS_MAX.altitude * i / (n - 1);
+          xs.push(alt);
+          ys.push(uSpeed(topSpeed(a, atm, atm.seaLevelY + alt, 1)));
+        }
+        return { xs, ys };
+      }
+    },
+    {
+      id: "polar-lift", title: "Lift coefficient",
+      x: () => "Angle of attack (deg)", y: "C_L",
+      sub: a => "peak " + fmt(a.CLmax, 2) + " at " + fmt(a.stallAoA, 1) + " deg \u2014 the stall is the peak of this table",
+      build: a => {
+        const xs = [], ys = [];
+        for (let d = -10; d <= 45; d += 0.5) { xs.push(d); ys.push(a.CL(d)); }
+        return { xs, ys };
+      }
+    },
+    {
+      id: "polar-drag", title: "Drag coefficient",
+      x: () => "Angle of attack (deg)", y: "C_d",
+      sub: () => "the alpha polar \u2014 there is no separate induced-drag term",
+      build: a => {
+        const xs = [], ys = [];
+        for (let d = -10; d <= 45; d += 0.5) { xs.push(d); ys.push(a.Cd(d)); }
+        return { xs, ys };
+      }
+    }
+  ],
+  missile: [
+    {
+      id: "speed-time", title: "Speed vs time",
+      yq: "speedTrace",
+      x: () => "Time (s)", y: () => "Speed (" + uSpeedLabel() + ")",
+      sub: m => "launched at " + fmt(uSpeed(launchSpeedOf(m)), 0) + " " + uSpeedLabel()
+        + (state.launchSpeed == null ? " (reference shot)" : "")
+        + ", boost to " + fmt(m.burnout, 2) + " s, then coast \u2014 level chase",
+      build: m => {
+        const f = missileFlight(m, atm, worldY(), launchSpeedOf(m), Math.min(m.lifeSeconds, 120));
+        return { xs: f.xs, ys: f.ys.map(uSpeed), dist: f.dist.map(uDist) };
+      }
+    },
+    {
+      id: "load", title: "Available load",
+      xq: "speed", yq: "load",
+      x: () => "Speed (" + uSpeedLabel() + ")", y: "Available load (g)",
+      sub: m => "at max fin deflection, capped at " + fmt(m.maxG, 0) + " g",
+      build: m => {
+        const xs = [], ys = [];
+        for (let i = 0; i < 72; i++) {
+          const v = 40 + (AXIS_MAX.speed - 40) * i / 71;
+          xs.push(uSpeed(v)); ys.push(availableLoadG(m, atm, v, worldY()));
+        }
+        return { xs, ys };
+      }
+    },
+    {
+      id: "nez", title: "No-escape zone",
+      xq: "speed",
+      x: () => "Launch speed (" + uSpeedLabel() + ")", y: () => "NEZ (" + uDistLabel() + ")",
+      sub: () => "target running at " + fmt(uSpeed(state.targetSpeed), 0) + " " + uSpeedLabel() + ", bounded by the round's own life \u2014 set with the Target speed slider",
+      build: m => {
+        const xs = [], ys = [];
+        for (let i = 0; i < 40; i++) {
+          const v = 40 + (AXIS_MAX.speed - 40) * i / 39;
+          xs.push(uSpeed(v)); ys.push(uDist(nez(m, atm, worldY(), v, state.targetSpeed)));
+        }
+        return { xs, ys };
+      }
+    },
+    {
+      id: "thrust", title: "Motor thrust",
+      x: () => "Time (s)", y: "Thrust (kN)",
+      sub: m => fmt(m.totalImpulse / 1000, 1) + " kNs total impulse",
+      build: m => {
+        const xs = [], ys = [];
+        const end = Math.min(m.burnout * 1.6 + 4, 40);
+        for (let t = 0; t <= end; t += end / 200) { xs.push(t); ys.push(m.thrust(t) / 1000); }
+        return { xs, ys };
+      }
+    },
+    {
+      id: "loft-path", title: "Lofted trajectory",
+      x: () => "Ground range (" + uDistLabel() + ")",
+      y: () => "Altitude (" + UNITS[units].alt.s + ")",
+      sub: m => m.loftAngleDegrees > 0
+        ? m.loftAngleDegrees + " deg loft, ceiling "
+          + fmt(UNITS[units].alt.f(m.loftCeiling), 0) + " " + UNITS[units].alt.s
+          + ", full beyond " + fmt(uDist(m.loftFullRange), 1) + " " + uDistLabel()
+        : "no loft: this round flies the flat path it always did",
+      build: m => {
+        const l = loftShot(m, atm, true);
+        return {
+          xs: l.xs.map(uDist),
+          ys: l.alts.map(v => UNITS[units].alt.f(v))
+        };
+      }
+    }
+  ]
+};
+
+/* A pinned ceiling in display units, or undefined for a free axis. */
+function pinFor(q) {
+  if (q === "speed") return uSpeed(AXIS_MAX.speed);
+  if (q === "speedTrace") return uSpeed(AXIS_MAX.speedTrace);
+  if (q === "altitude") return UNITS[units].alt.f(AXIS_MAX.altitude);
+  if (q === "load") return AXIS_MAX.load;
+  return undefined;
+}
+
+/* ---- adjustable ceilings -------------------------------------------
+   Each ceiling is typed in whichever unit its axis is currently showing:
+   speed follows the units toggle, altitude reads the same number either way
+   because a block is a metre here, and load is a g count with no unit to
+   convert. */
+const PLAIN_UNIT = { f: v => v, inv: v => v, s: "g" };
+const AXIS_UNIT = {
+  speed: () => UNITS[units].speed,
+  speedTrace: () => UNITS[units].speed,
+  altitude: () => UNITS[units].alt,
+  load: () => PLAIN_UNIT
+};
+
+function persistAxes() {
+  try { localStorage.setItem("fmb.axes", JSON.stringify(AXIS_MAX)); } catch (e) { }
+}
+
+const axesAreDefault = () =>
+  Object.keys(AXIS_DEFAULT).every(q => AXIS_MAX[q] === AXIS_DEFAULT[q]);
+
+/* The only way a ceiling changes. Every one of them is also a sampling
+   bound, so the series cache has to go with it. */
+function setAxis(q, displayValue) {
+  const metric = AXIS_UNIT[q]().inv(displayValue);
+  if (!Number.isFinite(metric) || metric <= 0) return false;
+  if (metric === AXIS_MAX[q]) return false;
+  AXIS_MAX[q] = metric;
+  cache.clear();
+  scalarMemo.clear();
+  persistAxes();
+  return true;
+}
+
+/* The altitude slider is the altitude axis seen end-on, so it follows that
+   ceiling rather than keeping a second, quietly different one. */
+function syncAltSlider() {
+  const el = document.getElementById("alt");
+  el.max = AXIS_MAX.altitude;
+  el.step = Math.max(50, niceStep(AXIS_MAX.altitude / 32));
+  if (state.altitude > AXIS_MAX.altitude) state.altitude = AXIS_MAX.altitude;
+  el.value = state.altitude;
+}
+
+function renderAxisRail() {
+  for (const q in AXIS_DEFAULT) {
+    const u = AXIS_UNIT[q]();
+    const input = document.getElementById("ax-" + q);
+    const shown = u.f(AXIS_MAX[q]);
+    /* Never rewrite the box someone is mid-way through typing into. */
+    if (document.activeElement !== input) input.value = String(+shown.toFixed(4));
+    document.getElementById("ax-" + q + "-u").textContent = u.s;
+  }
+  const dflt = axesAreDefault();
+  document.getElementById("axreset").hidden = dflt;
+  document.getElementById("axistoggle").textContent = dflt ? "Axes" : "Axes (edited)";
+  document.getElementById("axhint").textContent =
+    "Pinned ceilings, shared by every panel carrying that quantity, so two panels can be read against "
+    + "each other instead of each against its own private maximum. Speed also sets how far every "
+    + "aircraft curve is flown, and altitude sets the top of the altitude slider. Anything that runs "
+    + "past a ceiling is named under the chart rather than quietly clipped.";
+}
+
+/* Memoised \u2014 NEZ re-flies a whole trajectory per sample point. */
+const cache = new Map();
+function seriesFor(chart, key) {
+  const ck = [state.domain, chart.id, key, state.altitude, state.targetSpeed, state.launchSpeed, units].join("|");
+  if (cache.has(ck)) return cache.get(ck);
+  const v = chart.build(MODELS[state.domain][key]);
+  cache.set(ck, v);
+  return v;
+}
+
+/* ==================================================================== *
+ * 10. Render
+ * ==================================================================== */
+const main = document.getElementById("main");
+
+function renderPicker() {
+  const picker = document.getElementById("picker");
+  picker.innerHTML = "";
+  const full = sel().length >= MAX_OVERLAY && state.mode === "overlay";
+  for (const k of keys(state.domain)) {
+    const on = sel().includes(k);
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (full) b.dataset.full = "1";
+    b.innerHTML = `<span class="sw" style="background:${on ? colorOf(k) : "var(--rule)"}"></span>${MODELS[state.domain][k].id}`;
+    b.addEventListener("click", () => {
+      const i = sel().indexOf(k);
+      if (i >= 0) sel().splice(i, 1);
+      else {
+        if (state.mode === "overlay" && sel().length >= MAX_OVERLAY) return;
+        sel().push(k);
+      }
+      render();
+    });
+    picker.appendChild(b);
+  }
+  const note = document.getElementById("pickernote");
+  const total = keys(state.domain).length;
+  if (!total) {
+    note.textContent = "Nothing loaded \u2014 drop a folder of " + state.domain + " .json files below, or choose files or a folder.";
+    return;
+  }
+  note.textContent = state.mode === "overlay"
+    ? sel().length + " of " + total + " selected \u2014 overlay holds eight series, which is as many as stay distinguishable. Switch to small multiples for all " + total + "."
+    : sel().length + " of " + total + " selected \u2014 each drawn on its own axes, with the rest of the fleet behind it in grey.";
+}
+
+function panel(title, sub) {
+  const p = document.createElement("section");
+  p.className = "panel";
+  p.innerHTML = `<header><h3>${title}</h3><p class="sub">${sub || ""}</p></header>`;
+  const plot = document.createElement("div");
+  plot.className = "plot";
+  p.appendChild(plot);
+  return { panel: p, plot };
+}
+
+function legendFor(host, items) {
+  const l = document.createElement("div");
+  l.className = "legend";
+  l.innerHTML = items.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
+  host.appendChild(l);
+}
+
+function renderPerformance() {
+  const list = CHARTS[state.domain];
+  const grid = document.createElement("div");
+  grid.className = "grid two";
+
+  for (const chart of list) {
+    if (state.mode === "overlay") {
+      const series = sel().map(k => {
+        const s = seriesFor(chart, k);
+        const extra = s.dist ? { extra: s.dist, extraLabel: "distance", extraUnit: uDistLabel() } : null;
+        return { name: MODELS[state.domain][k].id, color: colorOf(k), xs: s.xs, ys: s.ys, ...extra };
+      });
+      const one = sel().length === 1 ? MODELS[state.domain][sel()[0]] : null;
+      const sub = typeof chart.sub === "function" ? (one ? chart.sub(one) : "") : chart.sub;
+      const { panel: p, plot } = panel(chart.title, sub);
+      const drawn = lineChart(plot, {
+        title: chart.title,
+        xLabel: typeof chart.x === "function" ? chart.x() : chart.x,
+        yLabel: typeof chart.y === "function" ? chart.y() : chart.y,
+        xMax: pinFor(chart.xq), yMax: pinFor(chart.yq),
+        series
+      });
+      if (series.length >= 2) legendFor(p, series);
+      if (drawn && drawn.over.length) {
+        const w = document.createElement("p");
+        w.className = "sub";
+        w.style.padding = "0 15px 12px";
+        w.style.color = "var(--warn)";
+        w.textContent = "runs past the pinned ceiling: " + drawn.over.join(", ");
+        p.appendChild(w);
+      }
+      grid.appendChild(p);
+    } else {
+      const { panel: p, plot } = panel(chart.title,
+        typeof chart.sub === "function" ? "" : chart.sub);
+      const inner = document.createElement("div");
+      inner.className = "grid";
+      inner.style.gridTemplateColumns = "repeat(auto-fit, minmax(230px, 1fr))";
+      inner.style.gap = "10px";
+      const context = keys(state.domain).map(k => seriesFor(chart, k));
+      for (const k of sel()) {
+        const s = seriesFor(chart, k);
+        const cell = document.createElement("div");
+        const cap = document.createElement("p");
+        cap.className = "sub";
+        cap.style.margin = "0 0 2px 4px";
+        cap.textContent = MODELS[state.domain][k].id;
+        cell.appendChild(cap);
+        const holder = document.createElement("div");
+        holder.style.position = "relative";
+        cell.appendChild(holder);
+        lineChart(holder, {
+          title: chart.title + " " + k,
+          xLabel: typeof chart.x === "function" ? chart.x() : chart.x,
+          yLabel: typeof chart.y === "function" ? chart.y() : chart.y,
+          compact: true,
+          xMax: pinFor(chart.xq), yMax: pinFor(chart.yq),
+          series: context.map(c => ({ name: "", color: "var(--rule)", xs: c.xs, ys: c.ys, faded: true }))
+            .concat([{
+              name: MODELS[state.domain][k].id, color: "var(--accent)", xs: s.xs, ys: s.ys, emphasis: true,
+              ...(s.dist ? { extra: s.dist, extraLabel: "distance", extraUnit: uDistLabel() } : null)
+            }])
+        });
+        inner.appendChild(cell);
+      }
+      plot.appendChild(inner);
+      grid.appendChild(p);
+    }
+  }
+  main.appendChild(grid);
+}
+
+/* ---- spec tab ------------------------------------------------------ */
+function aircraftRows(a) {
+  const y = worldY();
+  const ts = topSpeed(a, atm, y, 1);
+  const tsMil = topSpeed(a, atm, y, 0);
+  return {
+    "Mass &amp; wing": [
+      ["Mass", a.mass, "kg", 0],
+      ["Wing area", a.wingArea, "m\u00b2", 1],
+      ["Wing loading", a.mass / a.wingArea, "kg/m\u00b2", 1]
+    ],
+    "Engine": [
+      ["Static thrust (SL)", interp(a.curves.thrAlt, 0) / 1000, "kN", 1],
+      ["Burner multiplier", a.abMult, "\u00d7", 2],
+      ["Thrust/weight (wet)", interp(a.curves.thrAlt, 0) * a.abMult / (a.mass * atm.gravity), "", 2]
+    ],
+    "Computed performance": [
+      ["Top speed (burner)", uSpeed(ts), uSpeedLabel(), 1],
+      ["Top speed (military)", uSpeed(tsMil), uSpeedLabel(), 1],
+      ["Published (burner)", uSpeed(a.abSpeed), uSpeedLabel(), 1],
+      ["Published (military)", uSpeed(a.milSpeed), uSpeedLabel(), 1],
+      ["Stall speed", uSpeed(stallSpeed(a, atm, y)), uSpeedLabel(), 1],
+      ["Corner speed", uSpeed(cornerSpeed(a, atm, y)), uSpeedLabel(), 1],
+      ["Best climb", bestClimb(a, atm, y), "m/s", 1],
+      ["Service ceiling", ceiling(a, atm), "m", 0]
+    ],
+    "Limits": [
+      ["Max positive G", a.maxG, "g", 1],
+      ["Max negative G", a.minG, "g", 1],
+      ["Peak C_L", a.CLmax, "", 3],
+      ["Stall AoA", a.stallAoA, "deg", 1],
+      ["Limiter soft / hard", a.softAoA, "deg", 0],
+      ["Limiter hard", a.limitAoA, "deg", 0],
+      ["Structural limit", uSpeed(a.structAt(atm.alt(y))), uSpeedLabel(), 1]
+    ],
+    "Response": [
+      ["Max pitch rate", a.maxPitchRate, "deg/s", 0],
+      ["Max roll rate", a.maxRollRate, "deg/s", 0],
+      ["Max yaw rate", a.maxYawRate, "deg/s", 0]
+    ],
+    "Radar": a.radar ? [
+      ["Lock range", uDist(a.radar.lockRange), uDistLabel(), 1],
+      ["Azimuth (full width)", a.radar.hScan, "deg", 0],
+      ["Elevation (full width)", a.radar.vScan, "deg", 0],
+      ["Scan rate", a.radar.rateHz, "Hz", 1],
+      ["Sweep interval", Math.max(1, Math.round(20 / a.radar.rateHz)), "ticks", 0],
+      ["Max contacts", a.radar.contacts, "", 0],
+      ["Track memory", a.radar.memory, "s", 2]
+    ] : [],
+    "Fuel &amp; flaps": [
+      ["Capacity", a.fuelCapacity, "L", 0],
+      ["Burner flow", a.abFlow, "\u00d7", 2],
+      ["Flap lift", a.flapLift, "\u0394C_L", 2],
+      ["Flap drag", a.flapDrag, "\u0394C_d", 3]
+    ]
+  };
+}
+
+function missileRows(m) {
+  const h = missileHeadline(m, atm);
+  return {
+    "Airframe": [
+      ["Mass", m.mass, "kg", 0],
+      ["Reference area", m.referenceArea, "m\u00b2", 4],
+      ["Length", m.length, "m", 2]
+    ],
+    "Motor": [
+      ["Total impulse", m.totalImpulse / 1000, "kNs", 1],
+      ["Burnout", m.burnout, "s", 2],
+      ["Peak thrust", Math.max(...m.curves.thrustCurve.map(p => p[1])) / 1000, "kN", 1]
+    ],
+    "Measured at the reference shot": [
+      ["Peak speed", uSpeed(h.peakSpeed), uSpeedLabel(), 1],
+      ["Peak Mach", h.peakMach, "M", 2],
+      ["Time to peak", h.timeToPeak, "s", 2],
+      ["Speed at burnout", uSpeed(h.burnoutSpeed), uSpeedLabel(), 1],
+      ["No-escape zone", uDist(h.nez), uDistLabel(), 2],
+      ["Peak available load", h.maxLoadG, "g", 1]
+    ],
+    "Limits": [
+      ["Structural cap", m.maxG, "g", 0],
+      ["Max fin AoA", m.maxAoA, "deg", 0],
+      ["Lifetime", m.lifeSeconds, "s", 1]
+    ],
+    "Launch envelope": [
+      ["Max range", uDist(m.maxRange), uDistLabel(), 2],
+      ["Min range", m.minRange, "m", 0],
+      ["Launch cone", m.cone, "deg", 0],
+      ["Carried", m.carried, "", 0],
+      ["Cooldown", m.cooldown, "ticks", 0],
+      ["Rearm", m.rearm, "ticks", 0]
+    ],
+    /* Flown twice from the round's own maximum permitted range, once with the
+       loft and once with it forced off, so every figure here is attributable
+       to the loft and to nothing that came with it. */
+    "Midcourse loft": (() => {
+      const lofted = loftShot(m, atm, true);
+      const flat = loftShot(m, atm, false);
+      return [
+        ["Loft angle", m.loftAngleDegrees, "deg", 0],
+        ["Ceiling", m.loftAngleDegrees > 0 ? UNITS[units].alt.f(m.loftCeiling) : NaN,
+          UNITS[units].alt.s, 0],
+        ["Full angle beyond", m.loftAngleDegrees > 0 ? uDist(m.loftFullRange) : NaN,
+          uDistLabel(), 1],
+        ["Gone inside", m.loftAngleDegrees > 0 ? uDist(m.loftMinRange) : NaN,
+          uDistLabel(), 1],
+        ["Apex above launch", lofted.apexGain, "m", 0],
+        ["Arrival, flat", uSpeed(flat.terminalSpeed), uSpeedLabel(), 0],
+        ["Arrival, lofted", uSpeed(lofted.terminalSpeed), uSpeedLabel(), 0],
+        ["Loft is worth", uSpeed(lofted.terminalSpeed - flat.terminalSpeed),
+          uSpeedLabel(), 0]
+      ];
+    })(),
+    "Seeker": [
+      ["Gimbal limit", m.gimbal, "deg", 0],
+      ["Navigation constant", m.navConstant, "", 1],
+      ["Max lead", m.maxLeadTicks, "ticks", 0],
+      ["Guidance", m.activeHoming === null ? NaN : (m.activeHoming ? 1 : 0), m.activeHoming === null ? "" : (m.activeHoming ? "active" : "semi-active"), 0]
+    ],
+    "Warhead &amp; carriage": [
+      ["Explosion power", m.explosionPower, "", 1],
+      ["Proximity fuse", m.fuseRadius, "m", 1],
+      ["Arming distance", m.armingDistance, "m", 0],
+      ["Mass on the rail", m.carriedMass, "kg", 0],
+      ["Carriage drag area", m.carriedDragArea, "m\u00b2", 3]
+    ]
+  };
+}
+
+const BAR_METRICS = {
+  aircraft: [
+    { n: "Top speed, burner", f: (a) => uSpeed(topSpeed(a, atm, worldY(), 1)), u: () => uSpeedLabel(), d: 1 },
+    { n: "Thrust / weight, wet", f: a => interp(a.curves.thrAlt, 0) * a.abMult / (a.mass * atm.gravity), u: () => "", d: 2 },
+    { n: "Wing loading", f: a => a.mass / a.wingArea, u: () => "kg/m\u00b2", d: 0, invert: true },
+    { n: "Max positive G", f: a => a.maxG, u: () => "g", d: 0 },
+    { n: "Corner speed", f: a => uSpeed(cornerSpeed(a, atm, worldY())), u: () => uSpeedLabel(), d: 1, invert: true },
+    { n: "Best climb", f: a => bestClimb(a, atm, worldY()), u: () => "m/s", d: 0 },
+    { n: "Service ceiling", f: a => ceiling(a, atm), u: () => "m", d: 0 },
+    { n: "Max roll rate", f: a => a.maxRollRate, u: () => "deg/s", d: 0 },
+    { n: "Radar lock range", f: a => (a.radar ? uDist(a.radar.lockRange) : NaN), u: () => uDistLabel(), d: 1 },
+    { n: "Radar contacts", f: a => (a.radar ? a.radar.contacts : NaN), u: () => "", d: 0 }
+  ],
+  missile: [
+    { n: "Peak speed", f: m => uSpeed(missileHeadline(m, atm).peakSpeed), u: () => uSpeedLabel(), d: 0 },
+    { n: "No-escape zone", f: m => uDist(missileHeadline(m, atm).nez), u: () => uDistLabel(), d: 2 },
+    { n: "Total impulse", f: m => m.totalImpulse / 1000, u: () => "kNs", d: 1 },
+    { n: "Structural cap", f: m => m.maxG, u: () => "g", d: 0 },
+    { n: "Peak available load", f: m => missileHeadline(m, atm).maxLoadG, u: () => "g", d: 1 },
+    { n: "Declared max range", f: m => uDist(m.maxRange), u: () => uDistLabel(), d: 1 },
+    { n: "Lifetime", f: m => m.lifeSeconds, u: () => "s", d: 0 },
+    { n: "Mass", f: m => m.mass, u: () => "kg", d: 0, invert: true }
+  ]
+};
+
+function renderSpec() {
+  const ks = sel().length ? sel() : keys(state.domain);
+
+  /* KPI strip for a single focused item. */
+  if (ks.length === 1) {
+    const m = MODELS[state.domain][ks[0]];
+    const strip = document.createElement("dl");
+    strip.className = "envelope";
+    const cells = state.domain === "aircraft"
+      ? [["Mass", fmt(m.mass, 0), "kg"],
+      ["Wing area", fmt(m.wingArea, 1), "m\u00b2"],
+      ["Wing loading", fmt(m.mass / m.wingArea, 0), "kg/m\u00b2"],
+      ["T/W wet", fmt(interp(m.curves.thrAlt, 0) * m.abMult / (m.mass * atm.gravity), 2), ""],
+      ["Top speed", fmt(uSpeed(topSpeed(m, atm, worldY(), 1)), 1), uSpeedLabel()],
+      ["Corner speed", fmt(uSpeed(cornerSpeed(m, atm, worldY())), 1), uSpeedLabel()],
+      ["Ceiling", fmt(ceiling(m, atm), 0), "m"]]
+      : (() => { const h = missileHeadline(m, atm); return [
+        ["Mass", fmt(m.mass, 0), "kg"],
+        ["Impulse", fmt(m.totalImpulse / 1000, 1), "kNs"],
+        ["Burnout", fmt(m.burnout, 2), "s"],
+        ["Peak speed", fmt(uSpeed(h.peakSpeed), 0), uSpeedLabel()],
+        ["Peak Mach", fmt(h.peakMach, 2), "M"],
+        ["NEZ", fmt(uDist(h.nez), 2), uDistLabel()],
+        ["Peak load", fmt(h.maxLoadG, 1), "g"]]; })();
+    strip.innerHTML = cells.map(c => `<div class="cell"><dt>${c[0]}</dt><dd>${c[1]} <span>${c[2]}</span></dd></div>`).join("");
+    main.appendChild(strip);
+  }
+
+  /* Normalised bars \u2014 the fleet-balance read. */
+  const bars = document.createElement("div");
+  bars.className = "bars";
+  for (const met of BAR_METRICS[state.domain]) {
+    const vals = ks.map(k => ({ k, v: met.f(MODELS[state.domain][k]) })).filter(r => Number.isFinite(r.v));
+    if (!vals.length) continue;
+    const max = Math.max(...vals.map(r => r.v));
+    const min = Math.min(...vals.map(r => r.v));
+    const set = document.createElement("div");
+    set.className = "barset";
+    set.innerHTML = `<h4>${met.n}<em>${met.invert ? "lower is better \u00b7 " : ""}${fmt(min, met.d)}\u2013${fmt(max, met.d)} ${met.u()}</em></h4>`;
+    for (const r of vals.slice().sort((a, b) => (met.invert ? a.v - b.v : b.v - a.v))) {
+      const row = document.createElement("div");
+      row.className = "bar";
+      const w = max > 0 ? Math.max(1.5, r.v / max * 100) : 0;
+      row.innerHTML = `<span class="n">${MODELS[state.domain][r.k].id}</span>`
+        + `<span class="t"><i style="width:${w}%;background:${colorOf(r.k)}"></i></span>`
+        + `<span class="q">${fmt(r.v, met.d)}</span>`;
+      set.appendChild(row);
+    }
+    bars.appendChild(set);
+  }
+  main.appendChild(bars);
+
+  /* Full table. */
+  const groups = state.domain === "aircraft"
+    ? aircraftRows(MODELS.aircraft[ks[0]])
+    : missileRows(MODELS.missile[ks[0]]);
+  const rowsPer = {};
+  for (const k of ks) {
+    rowsPer[k] = state.domain === "aircraft"
+      ? aircraftRows(MODELS.aircraft[k]) : missileRows(MODELS.missile[k]);
+  }
+
+  const sc = document.createElement("div");
+  sc.className = "scroller";
+  let html = "<table><thead><tr><th>Field</th><th>Unit</th>"
+    + ks.map(k => `<th><span class="swatch" style="background:${colorOf(k)}"></span>${MODELS[state.domain][k].id}</th>`).join("")
+    + "</tr></thead><tbody>";
+  for (const g in groups) {
+    html += `<tr class="group"><td colspan="${ks.length + 2}">${g}</td></tr>`;
+    groups[g].forEach((row, ri) => {
+      html += `<tr><td>${row[0]}</td><td class="v" style="color:var(--muted)">${row[2] || ""}</td>`;
+      const base = rowsPer[ks[0]][g][ri];
+      for (const k of ks) {
+        const r = rowsPer[k][g][ri];
+        const v = r ? r[1] : NaN;
+        const differs = ks.length > 1 && base && Number.isFinite(v) && Number.isFinite(base[1])
+          && Math.abs(v - base[1]) > Math.max(1e-9, Math.abs(base[1]) * 1e-6);
+        html += `<td class="v${differs ? "" : ""}">${fmt(v, r ? r[3] : 2)}</td>`;
+      }
+      html += "</tr>";
+    });
+  }
+  html += "</tbody></table>";
+  sc.innerHTML = html;
+  main.appendChild(sc);
+
+  const n = document.createElement("p");
+  n.className = "note";
+  n.textContent = state.domain === "aircraft"
+    ? "Published speeds are declared in the document and reported to the HUD; the physics never reads them. Where the computed top speed disagrees, the document is the thing that is out of date \u2014 see the check strip above."
+    : "Every figure here is read from the round's own document. Four values the game also uses live only in Java and cannot be shown: induced-drag charge, its ceiling, the turn-rate cap and rail separation.";
+  main.appendChild(n);
+}
+
+/* ---- the honesty strip --------------------------------------------- */
+function renderCheck() {
+  if (state.domain !== "aircraft") return;
+  const wrap = document.createElement("div");
+  wrap.className = "scroller";
+  let html = "<table><thead><tr><th>Airframe</th><th>Computed burner</th><th>Published</th><th>Delta</th><th>Computed military</th><th>Published</th><th>Delta</th><th>Agreement</th></tr></thead><tbody>";
+  for (const k of keys("aircraft")) {
+    const a = MODELS.aircraft[k];
+    const y = atm.seaLevelY;             /* sea level, where published speeds are quoted */
+    const wet = topSpeed(a, atm, y, 1), dry = topSpeed(a, atm, y, 0);
+    const dw = (wet - a.abSpeed) / a.abSpeed * 100;
+    const dd = (dry - a.milSpeed) / a.milSpeed * 100;
+    const worst = Math.max(Math.abs(dw), Math.abs(dd));
+    const cls = worst < 5 ? "p-ok" : worst < 15 ? "p-warn" : "p-gap";
+    const word = worst < 5 ? "agrees" : worst < 15 ? "drifting" : "stale";
+    html += `<tr><td>${a.id}</td>`
+      + `<td class="v">${fmt(uSpeed(wet), 1)}</td><td class="v">${fmt(uSpeed(a.abSpeed), 1)}</td>`
+      + `<td class="v ${Math.abs(dw) >= 5 ? "diff" : ""}">${dw >= 0 ? "+" : ""}${fmt(dw, 1)}%</td>`
+      + `<td class="v">${fmt(uSpeed(dry), 1)}</td><td class="v">${fmt(uSpeed(a.milSpeed), 1)}</td>`
+      + `<td class="v ${Math.abs(dd) >= 5 ? "diff" : ""}">${dd >= 0 ? "+" : ""}${fmt(dd, 1)}%</td>`
+      + `<td><span class="pill ${cls}">${word}</span></td></tr>`;
+  }
+  html += "</tbody></table>";
+  wrap.innerHTML = html;
+
+  const head = document.createElement("div");
+  head.className = "section-head";
+  head.innerHTML = "<h2>Declared against computed</h2><p>Each document declares a sea-level level speed that the flight model never reads. Recomputing it from the same curves is the check that this page is telling the truth &mdash; and where the two disagree, it is the declaration that has gone stale.</p>";
+  main.appendChild(head);
+  main.appendChild(wrap);
+}
+
+function render() {
+  MODELS = buildModels();
+  main.innerHTML = "";
+  renderPicker();
+  renderByline();
+  renderFootnote();
+  renderAxisRail();
+  syncAltSlider();
+  document.getElementById("altv").textContent =
+    state.altitude + " " + UNITS[units].alt.s + (state.altitude ? "  \u00b7  \u03c1 " + atm.density(worldY()).toFixed(3) : "");
+  document.getElementById("tgtfield").hidden = state.domain !== "missile";
+  document.getElementById("lchfield").hidden = state.domain !== "missile";
+  document.getElementById("lchv").textContent = state.launchSpeed == null
+    ? "ref" : fmt(uSpeed(state.launchSpeed), 0) + " " + uSpeedLabel();
+  document.getElementById("tgtv").textContent = fmt(uSpeed(state.targetSpeed), 0) + " " + uSpeedLabel();
+  if (!keys(state.domain).length) {
+    const p = document.createElement("p");
+    p.className = "note";
+    p.style.cssText = "font-size:14px;margin:26px 0;color:var(--ink-soft)";
+    p.innerHTML = "No " + state.domain + " loaded yet. Drop a folder of " + state.domain
+      + " <code>.json</code> below, or choose files or a folder, to draw a chart.";
+    main.appendChild(p);
+  } else {
+    if (state.tab === "performance") renderPerformance(); else renderSpec();
+    if (state.tab === "spec") renderCheck();
+  }
+  document.getElementById("reset").hidden =
+    !Object.keys(state.uploads.aircraft).length
+    && !Object.keys(state.uploads.missile).length
+    && !environmentIsCustom();
+}
+
+/* ==================================================================== *
+ * 11. Wiring
+ * ==================================================================== */
+function segGroup(attr, apply) {
+  document.querySelectorAll(`[data-${attr}]`).forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(`[data-${attr}]`).forEach(o => o.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      apply(b.dataset[attr]);
+      render();
+    });
+  });
+}
+segGroup("domain", v => { state.domain = v; });
+segGroup("tab", v => { state.tab = v; });
+segGroup("mode", v => {
+  state.mode = v;
+  if (v === "overlay" && sel().length > MAX_OVERLAY) state.selected[state.domain] = sel().slice(0, MAX_OVERLAY);
+});
+segGroup("units", v => { units = v; cache.clear(); scalarMemo.clear(); });
+
+/* ---- axis ceilings ------------------------------------------------- */
+document.getElementById("axistoggle").addEventListener("click", e => {
+  const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+  e.currentTarget.setAttribute("aria-pressed", on ? "true" : "false");
+  document.getElementById("axisrail").hidden = !on;
+});
+
+/* Typing is debounced because a ceiling change clears the series cache and
+   every curve is flown again; committing on blur or Enter is immediate. */
+let axisTimer = 0;
+const applyAxis = (q, v) => {
+  if (setAxis(q, v)) { syncAltSlider(); render(); }
+};
+for (const q of Object.keys(AXIS_DEFAULT)) {
+  const input = document.getElementById("ax-" + q);
+  input.addEventListener("input", () => {
+    const v = parseFloat(input.value);
+    if (!Number.isFinite(v) || v <= 0) return;   /* half-typed, or junk */
+    clearTimeout(axisTimer);
+    axisTimer = setTimeout(() => applyAxis(q, v), 260);
+  });
+  input.addEventListener("change", () => {
+    clearTimeout(axisTimer);
+    const v = parseFloat(input.value);
+    if (Number.isFinite(v) && v > 0) applyAxis(q, v);
+    else renderAxisRail();                        /* put the old value back */
+  });
+}
+
+document.getElementById("axreset").addEventListener("click", () => {
+  Object.assign(AXIS_MAX, AXIS_DEFAULT);
+  cache.clear();
+  scalarMemo.clear();
+  persistAxes();
+  syncAltSlider();
+  render();
+});
+
+document.getElementById("alt").addEventListener("input", e => {
+  state.altitude = +e.target.value;
+  render();
+});
+document.getElementById("lch").addEventListener("input", e => {
+  state.launchSpeed = +e.target.value;
+  render();
+});
+document.getElementById("lch").addEventListener("dblclick", e => {
+  state.launchSpeed = null;
+  e.target.value = 340;
+  render();
+});
+document.getElementById("tgt").addEventListener("input", e => {
+  state.targetSpeed = +e.target.value;
+  render();
+});
+
+/* ---- uploads ------------------------------------------------------- */
+function ingest(name, text) {
+  let doc;
+  try { doc = parseJsonc(text); }
+  catch (err) { return { ok: false, msg: name + ": could not be parsed \u2014 " + err.message }; }
+  if (!doc || typeof doc !== "object") return { ok: false, msg: name + ": not a JSON object" };
+  const stem = name.replace(/\.json$/i, "").toLowerCase();
+  const key = (typeof doc.id === "string" && doc.id ? doc.id : stem).toLowerCase();
+
+  /* Classified by shape, not by filename, so a renamed file still lands in the
+     right place. The environment is the only document with no aerodynamics at
+     all: it carries the air itself. */
+  const isEnvironment = ("densityCurve" in doc) || ("speedOfSoundCurve" in doc)
+    || ("seaLevelY" in doc) || ("altitudeScale" in doc);
+  if (isEnvironment) {
+    if (!Array.isArray(doc.densityCurve) && !Array.isArray(doc.speedOfSoundCurve)) {
+      return { ok: false, msg: name + ": looks like an environment but carries neither "
+        + "densityCurve nor speedOfSoundCurve" };
+    }
+    state.uploads.environment = doc;
+    rebuildAtmosphere();
+    return { ok: true, domain: "environment", key: "environment" };
+  }
+
+  const isMissile = ("motor" in doc) || ("seeker" in doc) || ("referenceShot" in doc) || ("thrustCurve" in doc);
+  const domain = isMissile ? "missile" : "aircraft";
+  /* Same id as something already loaded -- an edit, not a new entry -- replaces it in place. */
+  state.uploads[domain][key] = doc;
+  return { ok: true, domain, key };
+}
+
+function handleFiles(files) {
+  const jobs = [];
+  for (const f of files) {
+    if (!/\.json$/i.test(f.name)) continue;   /* a dropped folder brings whatever else lives in it */
+    jobs.push(f.text().then(t => ingest(f.name, t)));
+  }
+  if (!jobs.length) return;
+  Promise.all(jobs).then(results => {
+    const bad = results.filter(r => !r.ok);
+    const good = results.filter(r => r.ok);
+    for (const r of good) {
+      /* An environment is not a thing to select or switch to: it replaces the
+         air every other document is measured in, so it changes every number on
+         the page without adding a series. */
+      if (r.domain === "environment") continue;
+      state.domain = r.domain;
+      MODELS = buildModels();
+      if (!sel().includes(r.key)) {
+        if (state.mode === "overlay" && sel().length >= MAX_OVERLAY) sel().pop();
+        sel().push(r.key);
+      }
+    }
+    /* Rebuilt unconditionally: a new atmosphere changes the lift, drag and
+       thrust of aircraft that were already loaded, not just of new ones. */
+    MODELS = buildModels();
+    document.querySelectorAll("[data-domain]").forEach(b =>
+      b.setAttribute("aria-pressed", b.dataset.domain === state.domain ? "true" : "false"));
+    persist();
+    cache.clear(); scalarMemo.clear();
+    render();
+    if (bad.length) {
+      const n = document.createElement("p");
+      n.className = "note";
+      n.style.color = "var(--gap)";
+      n.textContent = bad.map(b => b.msg).join("  \u00b7  ");
+      main.prepend(n);
+    }
+  });
+}
+
+/* Walks one dropped filesystem entry down to a flat list of Files. The
+   entries API is allowed to hand back a directory's children in batches \u2014
+   keep calling readEntries until it returns nothing. */
+function filesFromEntry(entry) {
+  if (entry.isFile) {
+    return new Promise(resolve => entry.file(f => resolve([f]), () => resolve([])));
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const children = [];
+    return new Promise(resolve => {
+      (function readBatch() {
+        reader.readEntries(batch => {
+          if (!batch.length) { Promise.all(children).then(lists => resolve(lists.flat())); return; }
+          for (const child of batch) children.push(filesFromEntry(child));
+          readBatch();
+        }, () => resolve([]));
+      })();
+    });
+  }
+  return Promise.resolve([]);
+}
+
+const drop = document.getElementById("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.add("over");
+}));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.remove("over");
+}));
+drop.addEventListener("drop", e => {
+  if (!e.dataTransfer) return;
+  const items = e.dataTransfer.items;
+  /* A dropped folder only survives as a FileSystemDirectoryEntry, not as a
+     File \u2014 walk the entries API when it's there, and only fall back to the
+     flat file list (no folders possible) if it isn't. */
+  const entries = items && items.length && items[0].webkitGetAsEntry
+    ? Array.from(items).map(it => it.webkitGetAsEntry()).filter(Boolean)
+    : null;
+  if (entries && entries.length) {
+    Promise.all(entries.map(filesFromEntry)).then(lists => handleFiles(lists.flat()));
+  } else if (e.dataTransfer.files.length) {
+    handleFiles(e.dataTransfer.files);
+  }
+});
+document.getElementById("browse").addEventListener("click", () => document.getElementById("file").click());
+document.getElementById("file").addEventListener("change", e => {
+  if (e.target.files.length) handleFiles(e.target.files);
+  e.target.value = "";
+});
+document.getElementById("browseFolder").addEventListener("click", () => document.getElementById("folder").click());
+document.getElementById("folder").addEventListener("change", e => {
+  if (e.target.files.length) handleFiles(e.target.files);
+  e.target.value = "";
+});
+document.getElementById("reset").addEventListener("click", () => {
+  state.uploads = { aircraft: {}, missile: {}, environment: null };
+  rebuildAtmosphere();
+  persist();
+  MODELS = buildModels();
+  state.selected = { aircraft: [], missile: [] };
+  cache.clear(); scalarMemo.clear();
+  render();
+});
+
+/* ---- footer copy --------------------------------------------------- */
+function renderByline() {
+  const counted = d => {
+    const n = Object.keys(MODELS[d]).length;
+    const up = Object.keys(state.uploads[d]).length;
+    return n + (up ? " (" + up + " yours)" : "");
+  };
+  document.getElementById("byline").innerHTML = [
+    counted("aircraft") + " airframes",
+    counted("missile") + " rounds",
+    (environmentIsCustom() ? "atmosphere: uploaded"
+      : "defaults \u00b7 " + RAW.stamp),
+    "sea level \u03c1 " + atm.density(atm.seaLevelY).toFixed(3) + " kg/m\u00b3",
+    "a " + atm.sos(atm.seaLevelY).toFixed(0) + " m/s",
+    "g " + atm.gravity.toFixed(2) + " m/s\u00b2"
+  ].map(s => "<span>" + s + "</span>").join("");
+}
+
+function renderFootnote() {
+  document.getElementById("footnote").innerHTML =
+    "The built-in documents are the mod's defaults as of " + RAW.stamp + ". The atmosphere is the real ISA out "
+    + "to 28 km, with altitude in metres above sea level. "
+    + (environmentIsCustom()
+        ? "You have dropped in your own environment.json, so every curve on this page is computed against that air "
+          + "rather than the built-in one."
+        : "Drop in an environment.json to recompute every curve against your own air.")
+    + " The lofted-trajectory panel flies each missile twice from its maximum range, once with the loft and once "
+    + "without. It is a point-mass shot in the vertical plane, while the game flies full proportional navigation in "
+    + "three dimensions, so read the difference the loft makes as a direction rather than an exact figure. The 10 g "
+    + "limit the game applies for the first half-second after launch is not modelled here."
+    + " Every curve is sorted by its x before interpolation and clamps flat past both ends, exactly as the game "
+    + "reads it, so a table written out of order is read the same here as in the mod.";
+}
+
+/* Axes restored from a previous visit open the rail, so nobody reads a chart
+   against a ceiling they set last week without being told. */
+if (!axesAreDefault()) {
+  document.getElementById("axistoggle").setAttribute("aria-pressed", "true");
+  document.getElementById("axisrail").hidden = false;
+}
+
+render();
+</script>
+
